@@ -308,106 +308,99 @@ function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
 // ─── COMPONENTE RECTÁNGULO DE ZONA ───────────────────────────────────────────
 function RectanguloZona({ imgSrc, onZonaSeleccionada, onCancelar }) {
   const canvasRef = useRef(null);
-  const wrapperRef = useRef(null);
   const drawingRef = useRef(false);
   const startRef = useRef(null);
   const [rect, setRect] = useState(null);
-  const [imgSize, setImgSize] = useState({ w: 0, h: 0, natW: 0, natH: 0 });
+  const [imgSize, setImgSize] = useState({ w: 800, h: 0, natW: 0, natH: 0 });
 
   useEffect(() => {
     const img = new Image();
     img.onload = () => {
-      const calcSize = () => {
-        const wrapper = wrapperRef.current;
-        const w = wrapper ? Math.floor(wrapper.getBoundingClientRect().width) : 600;
-        const ratio = img.naturalHeight / img.naturalWidth;
-        setImgSize({ w, h: Math.round(w * ratio), natW: img.naturalWidth, natH: img.naturalHeight });
-      };
-      calcSize();
-      setTimeout(calcSize, 50);
-      setTimeout(calcSize, 150);
+      const maxW = Math.min(800, window.innerWidth - 80);
+      const ratio = img.naturalHeight / img.naturalWidth;
+      setImgSize({ w: maxW, h: Math.round(maxW * ratio), natW: img.naturalWidth, natH: img.naturalHeight });
     };
     img.src = imgSrc;
   }, [imgSrc]);
 
-  // ── BLOQUEAR SCROLL/ZOOM DEL NAVEGADOR en el canvas ──
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !imgSize.w) return;
-    const prevent = (e) => e.preventDefault();
-    canvas.addEventListener("wheel", prevent, { passive: false });
-    canvas.addEventListener("touchmove", prevent, { passive: false });
-    canvas.addEventListener("touchstart", prevent, { passive: false });
-    canvas.addEventListener("contextmenu", prevent);
-    return () => {
-      canvas.removeEventListener("wheel", prevent);
-      canvas.removeEventListener("touchmove", prevent);
-      canvas.removeEventListener("touchstart", prevent);
-      canvas.removeEventListener("contextmenu", prevent);
-    };
-  }, [imgSize]);
-
-  // ── REDIBUJAR CANVAS ──
   const redraw = useCallback((currentRect) => {
     const canvas = canvasRef.current;
-    if (!canvas || !imgSize.w) return;
+    if (!canvas || !imgSize.h) return;
+
     const ctx = canvas.getContext("2d");
     const img = new Image();
+
     img.onload = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
       if (currentRect && currentRect.w > 0 && currentRect.h > 0) {
+        // Oscurece todo menos el área seleccionada, SIN redibujar la imagen dentro del rectángulo.
+        // Así se evita el efecto de zoom al seleccionar la zona.
+        ctx.save();
         ctx.fillStyle = "rgba(0,0,0,0.5)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.clearRect(currentRect.x, currentRect.y, currentRect.w, currentRect.h);
-        ctx.drawImage(img, currentRect.x, currentRect.y, currentRect.w, currentRect.h, currentRect.x, currentRect.y, currentRect.w, currentRect.h);
+        ctx.beginPath();
+        ctx.rect(0, 0, canvas.width, canvas.height);
+        ctx.rect(currentRect.x, currentRect.y, currentRect.w, currentRect.h);
+        ctx.fill("evenodd");
+        ctx.restore();
+
         ctx.strokeStyle = "#00c8ff";
         ctx.lineWidth = 2;
         ctx.setLineDash([6, 3]);
         ctx.strokeRect(currentRect.x, currentRect.y, currentRect.w, currentRect.h);
         ctx.setLineDash([]);
+
         const cs = 10;
         ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = 2;
-        [[currentRect.x, currentRect.y], [currentRect.x + currentRect.w, currentRect.y], [currentRect.x, currentRect.y + currentRect.h], [currentRect.x + currentRect.w, currentRect.y + currentRect.h]].forEach(([cx, cy]) => {
+        [
+          [currentRect.x, currentRect.y],
+          [currentRect.x + currentRect.w, currentRect.y],
+          [currentRect.x, currentRect.y + currentRect.h],
+          [currentRect.x + currentRect.w, currentRect.y + currentRect.h],
+        ].forEach(([cx, cy]) => {
           const sx = cx === currentRect.x ? 1 : -1;
           const sy = cy === currentRect.y ? 1 : -1;
-          ctx.beginPath(); ctx.moveTo(cx, cy + sy * cs); ctx.lineTo(cx, cy); ctx.lineTo(cx + sx * cs, cy); ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(cx, cy + sy * cs);
+          ctx.lineTo(cx, cy);
+          ctx.lineTo(cx + sx * cs, cy);
+          ctx.stroke();
         });
+
         ctx.fillStyle = "#00c8ff";
         ctx.font = "bold 12px monospace";
         const labelY = currentRect.y > 20 ? currentRect.y - 6 : currentRect.y + currentRect.h + 16;
         ctx.fillText(`${Math.round(currentRect.w)}×${Math.round(currentRect.h)}px`, currentRect.x + 4, labelY);
       }
     };
+
     img.src = imgSrc;
   }, [imgSize, imgSrc]);
 
   useEffect(() => { redraw(rect); }, [rect, redraw]);
 
-  // ── OBTENER POSICIÓN ESCALADA ──
   const getPos = (e) => {
     const canvas = canvasRef.current;
     const r = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / r.width;
-    const scaleY = canvas.height / r.height;
     return {
-      x: Math.max(0, Math.min((e.clientX - r.left) * scaleX, canvas.width)),
-      y: Math.max(0, Math.min((e.clientY - r.top) * scaleY, canvas.height)),
+      x: Math.max(0, Math.min((e.clientX - r.left) * (canvas.width / r.width), canvas.width)),
+      y: Math.max(0, Math.min((e.clientY - r.top) * (canvas.height / r.height), canvas.height)),
     };
   };
 
-  // ── EVENTOS MOUSE — usando refs para evitar re-renders durante drag ──
-  const handleMouseDown = (e) => {
+  const handlePointerDown = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
     const p = getPos(e);
     startRef.current = p;
     drawingRef.current = true;
     setRect(null);
   };
 
-  const handleMouseMove = (e) => {
+  const handlePointerMove = (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (!drawingRef.current || !startRef.current) return;
@@ -421,9 +414,11 @@ function RectanguloZona({ imgSrc, onZonaSeleccionada, onCancelar }) {
     setRect(newRect);
   };
 
-  const handleMouseUp = (e) => {
-    if (e) { e.preventDefault(); e.stopPropagation(); }
+  const handlePointerUp = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     drawingRef.current = false;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
   };
 
   const confirmar = () => {
@@ -439,35 +434,35 @@ function RectanguloZona({ imgSrc, onZonaSeleccionada, onCancelar }) {
     });
   };
 
-  if (!imgSize.w) return <div style={{ color: "#4a8faa", padding: 20 }}>Cargando imagen...</div>;
+  if (!imgSize.h) return <div style={{ color: "#4a8faa", padding: 20 }}>Cargando imagen...</div>;
 
   return (
     <div style={{ animation: "fadein 0.3s ease" }}>
       <p style={{ color: "#00c8ff", fontFamily: "'Share Tech Mono', monospace", fontSize: 12, marginBottom: 12 }}>
         ⬡ Arrastra para seleccionar la zona a analizar
       </p>
-      <div ref={wrapperRef} style={{ width: "100%", lineHeight: 0, overflow: "hidden" }}>
-        <canvas
-          ref={canvasRef}
-          width={imgSize.w}
-          height={imgSize.h}
-          style={{
-            display: "block",
-            border: "1px solid #0f4060",
-            cursor: "crosshair",
-            width: "100%",
-            userSelect: "none",
-            touchAction: "none",
-            WebkitUserSelect: "none",
-            MozUserSelect: "none",
-          }}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          onDragStart={(e) => e.preventDefault()}
-        />
-      </div>
+      <canvas
+        ref={canvasRef}
+        width={imgSize.w}
+        height={imgSize.h}
+        style={{
+          display: "block",
+          border: "1px solid #0f4060",
+          cursor: "crosshair",
+          maxWidth: "100%",
+          height: "auto",
+          userSelect: "none",
+          touchAction: "none",
+          WebkitUserSelect: "none",
+          MozUserSelect: "none",
+        }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onContextMenu={(e) => e.preventDefault()}
+        onDragStart={(e) => e.preventDefault()}
+      />
       <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
         <button className="lilly-btn btn-green" onClick={confirmar} disabled={!rect || rect.w < 20}>⬡ Confirmar zona</button>
         <button className="lilly-btn btn-gray" onClick={onCancelar}>⬡ Cancelar</button>
