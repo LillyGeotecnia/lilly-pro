@@ -136,7 +136,6 @@ body { background: ${prefs.bgColor}; color: #c8dff0; font-family: 'Rajdhani', sa
 
 // ─── LLAMADA A CLAUDE API ─────────────────────────────────────────────────────
 async function llamarClaudeVision(imageDataUrl, escalaInfo) {
-  // Llamada al servidor Next.js que maneja la API key de Anthropic de forma segura
   const response = await fetch("/api/analizar-imagen", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -146,9 +145,6 @@ async function llamarClaudeVision(imageDataUrl, escalaInfo) {
   if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
   return data;
 }
-
-
-
 
 // ─── HELPER: RECORTAR IMAGEN ────────────────────────────────────────────────────
 function recortarImagen(dataUrl, rect) {
@@ -215,10 +211,15 @@ function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
   const getPos = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY
+    };
   };
 
-  const onMouseDown = (e) => { const p = getPos(e); setStart(p); setDrawing(true); setCircle(null); };
+  const onMouseDown = (e) => { e.preventDefault(); const p = getPos(e); setStart(p); setDrawing(true); setCircle(null); };
   const onMouseMove = (e) => {
     if (!drawing || !start) return;
     const p = getPos(e);
@@ -299,7 +300,6 @@ function RectanguloZona({ imgSrc, onZonaSeleccionada, onCancelar }) {
         const ratio = img.naturalHeight / img.naturalWidth;
         setImgSize({ w, h: Math.round(w * ratio), natW: img.naturalWidth, natH: img.naturalHeight });
       };
-      // Intentar varias veces hasta que el wrapper tenga ancho real
       calcSize();
       setTimeout(calcSize, 50);
       setTimeout(calcSize, 150);
@@ -315,7 +315,6 @@ function RectanguloZona({ imgSrc, onZonaSeleccionada, onCancelar }) {
     img.onload = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      // Overlay oscuro fuera del rectángulo
       if (rect) {
         ctx.fillStyle = "rgba(0,0,0,0.5)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -326,7 +325,6 @@ function RectanguloZona({ imgSrc, onZonaSeleccionada, onCancelar }) {
         ctx.setLineDash([6, 3]);
         ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
         ctx.setLineDash([]);
-        // Esquinas
         const cs = 10;
         ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = 2;
@@ -335,10 +333,7 @@ function RectanguloZona({ imgSrc, onZonaSeleccionada, onCancelar }) {
           const sy = cy === rect.y ? 1 : -1;
           ctx.beginPath(); ctx.moveTo(cx, cy + sy*cs); ctx.lineTo(cx, cy); ctx.lineTo(cx + sx*cs, cy); ctx.stroke();
         });
-        // Dimensiones
         const scaleX = imgSize.natW / imgSize.w;
-        const wM = (rect.w * scaleX / 100).toFixed(1);
-        const hM = (rect.h * scaleX / 100).toFixed(1);
         ctx.fillStyle = "#00c8ff";
         ctx.font = "bold 12px monospace";
         ctx.fillText(`${Math.round(rect.w)}×${Math.round(rect.h)}px`, rect.x + 4, rect.y - 6);
@@ -347,13 +342,25 @@ function RectanguloZona({ imgSrc, onZonaSeleccionada, onCancelar }) {
     img.src = imgSrc;
   }, [rect, imgSize, imgSrc]);
 
+  // ── CORRECCIÓN ZOOM: escalar coordenadas según tamaño real del canvas ──
   const getPos = (e) => {
     const canvas = canvasRef.current;
     const r = canvas.getBoundingClientRect();
-    return { x: Math.max(0, Math.min(e.clientX - r.left, canvas.width)), y: Math.max(0, Math.min(e.clientY - r.top, canvas.height)) };
+    const scaleX = canvas.width / r.width;
+    const scaleY = canvas.height / r.height;
+    return {
+      x: Math.max(0, Math.min((e.clientX - r.left) * scaleX, canvas.width)),
+      y: Math.max(0, Math.min((e.clientY - r.top)  * scaleY, canvas.height))
+    };
   };
 
-  const onMouseDown = (e) => { const p = getPos(e); setStart(p); setDrawing(true); setRect(null); };
+  const onMouseDown = (e) => {
+    e.preventDefault();
+    const p = getPos(e);
+    setStart(p);
+    setDrawing(true);
+    setRect(null);
+  };
   const onMouseMove = (e) => {
     if (!drawing || !start) return;
     const p = getPos(e);
@@ -380,15 +387,16 @@ function RectanguloZona({ imgSrc, onZonaSeleccionada, onCancelar }) {
         ⬡ Arrastra para seleccionar la zona a analizar
       </p>
       <div ref={wrapperRef} style={{ width: "100%", lineHeight: 0 }}>
-      <canvas
-        ref={canvasRef}
-        width={imgSize.w}
-        height={imgSize.h}
-        style={{ display: "block", border: "1px solid #0f4060", cursor: "crosshair", width: "100%" }}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-      />
+        <canvas
+          ref={canvasRef}
+          width={imgSize.w}
+          height={imgSize.h}
+          style={{ display: "block", border: "1px solid #0f4060", cursor: "crosshair", width: "100%", userSelect: "none" }}
+          onMouseDown={onMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={onMouseUp}
+          onMouseLeave={onMouseUp}
+        />
       </div>
       <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
         <button className="lilly-btn btn-green" onClick={confirmar} disabled={!rect || rect.w < 20}>⬡ Confirmar zona</button>
@@ -475,19 +483,15 @@ function PanelConfig({ prefs, onSave, onClose }) {
 // ─── EXPORTAR EXCEL FORMATO CARTILLA ─────────────────────────────────────────
 function exportarCartillaExcel(evaluaciones, datosGenerales) {
   if (evaluaciones.length === 0) { alert("No hay evaluaciones para exportar"); return; }
-  
 
   const { tronada, banco, sector, coordE, coordN, coordCota, fecha, tipoLit, rcu, rqd, ff, agua, realizadoPor, observaciones } = datosGenerales;
   const coords = [coordE, coordN, coordCota].filter(Boolean).join(", ");
 
-  // Construir datos de la hoja
   const aoa = [];
 
-  // Fila 1: Título
   aoa.push(["CARTILLA: EVALUACIÓN GEOLÓGICA Y GEOTÉCNICA", "", "", "", "", "", "", "APOYO AL DISEÑO DE TRONADURA"]);
   aoa.push([]);
 
-  // Info general
   aoa.push(["Información General"]);
   aoa.push(["Tronada (Banco - N°)", `${banco || ""} - ${tronada || ""}`]);
   aoa.push(["Sector", sector || ""]);
@@ -495,7 +499,6 @@ function exportarCartillaExcel(evaluaciones, datosGenerales) {
   aoa.push(["Fecha", fecha || new Date().toLocaleDateString()]);
   aoa.push([]);
 
-  // Características de la roca
   aoa.push(["Característica de la Roca"]);
   aoa.push(["Tipo Litológico", tipoLit || ""]);
   aoa.push(["Resistencia a la Compresión Simple (MPa)", rcu || ""]);
@@ -504,7 +507,6 @@ function exportarCartillaExcel(evaluaciones, datosGenerales) {
   aoa.push(["Presencia de agua", agua || ""]);
   aoa.push([]);
 
-  // Encabezado tabla Lilly
   aoa.push(["Índice de tronabilidad según Lilly (Estimación de Factor de Carga)"]);
   const getColLabel = (i) => {
     if (i < 26) return String.fromCharCode(65 + i);
@@ -513,39 +515,29 @@ function exportarCartillaExcel(evaluaciones, datosGenerales) {
   const colHeaders = ["Parámetro", "Descripción", "Ratings", "Valor", ...evaluaciones.map((_, i) => `Celda ${getColLabel(i)}`), "Observaciones"];
   aoa.push(colHeaders);
 
-  // RMD
   aoa.push(["RMD", "Descripción del macizo rocoso.", "Poco Consolidado", 10, ...evaluaciones.map(e => e.rmd == 10 ? 10 : ""), ""]);
   aoa.push(["", "", "Diaclasado en Bloques (0.5m)", 20, ...evaluaciones.map(e => e.rmd >= 15 && e.rmd <= 25 ? e.rmd : ""), ""]);
   aoa.push(["", "", "Diaclasado en Bloques (1.0 m)", 30, ...evaluaciones.map(e => e.rmd >= 26 && e.rmd <= 35 ? e.rmd : ""), ""]);
   aoa.push(["", "", "Diaclasado en Bloques (>1 m)", 40, ...evaluaciones.map(e => e.rmd >= 36 && e.rmd <= 45 ? e.rmd : ""), ""]);
   aoa.push(["", "", "Masivo", 50, ...evaluaciones.map(e => e.rmd >= 46 ? e.rmd : ""), ""]);
 
-  // JPS
   aoa.push(["JPS", "Espaciamiento entre fracturas.", "Pequeño ( < 0.1 m)", 10, ...evaluaciones.map(e => e.jps <= 15 ? e.jps : ""), ""]);
   aoa.push(["", "", "Intermedio ( 0.1 m a 1.0 m)", 20, ...evaluaciones.map(e => e.jps > 15 && e.jps < 45 ? e.jps : ""), ""]);
   aoa.push(["", "", "Grande ( > 1.0 m)", 50, ...evaluaciones.map(e => e.jps >= 45 ? e.jps : ""), ""]);
 
-  // JPO
   aoa.push(["JPO", "Orientación de los planos de fractura.", "Horizontal (a)", 10, ...evaluaciones.map(e => e.jpo <= 15 ? e.jpo : ""), ""]);
   aoa.push(["", "", "Manteo hacia la cara (b)", 20, ...evaluaciones.map(e => e.jpo > 15 && e.jpo <= 25 ? e.jpo : ""), ""]);
   aoa.push(["", "", "Rumbo normal a la cara (c)", 30, ...evaluaciones.map(e => e.jpo > 25 && e.jpo <= 35 ? e.jpo : ""), ""]);
   aoa.push(["", "", "Manteo contra la cara (d)", 40, ...evaluaciones.map(e => e.jpo > 35 ? e.jpo : ""), ""]);
 
-  // SGI
   aoa.push(["SGI", "Influencia de la densidad de la roca.", "SGI = 25 * SG - 50", "", ...evaluaciones.map(e => e.sgi || ""), ""]);
-
-  // HD
   aoa.push(["HD", "Dureza de la Roca", "HD = 0.05 x RCU", "", ...evaluaciones.map(e => e.hd || ""), "También puede utilizarse RCU: HD = 0.05 x RCU"]);
-
-  // BI
   aoa.push(["BI", "Índice de Tronabilidad", "BI = 0.5 x (RMD + JPS + JPO + SGI + HD)", "", ...evaluaciones.map(e => e.bi || ""), ""]);
   aoa.push([]);
 
-  // FC
   aoa.push(["FC", "Factor de Carga", "FC = 4 x BI", "", ...evaluaciones.map(e => e.fc || ""), ""]);
   aoa.push([]);
 
-  // Observaciones
   aoa.push(["Observaciones Generales"]);
   aoa.push([observaciones || ""]);
   aoa.push([]);
@@ -556,7 +548,6 @@ function exportarCartillaExcel(evaluaciones, datosGenerales) {
   XLSX.utils.book_append_sheet(wb, ws, "Cartilla Lilly");
   XLSX.writeFile(wb, `Cartilla_Lilly_${sector || "evaluacion"}_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
-
 
 // ─── PANTALLA DE LOGIN ────────────────────────────────────────────────────────
 function PantallaLogin({ onLogin }) {
@@ -569,7 +560,6 @@ function PantallaLogin({ onLogin }) {
     if (!nombre.trim() || !pin.trim()) { setError("Ingresa tu nombre y PIN"); return; }
     setLoading(true); setError("");
     try {
-      // Buscar evaluador existente
       const { data, error: err } = await supabase
         .from("evaluadores")
         .select("*")
@@ -577,7 +567,6 @@ function PantallaLogin({ onLogin }) {
         .single();
 
       if (err && err.code === "PGRST116") {
-        // No existe, crear nuevo
         const { data: nuevo, error: errCreate } = await supabase
           .from("evaluadores")
           .insert({ nombre: nombre.trim(), pin: pin.trim() })
@@ -588,7 +577,6 @@ function PantallaLogin({ onLogin }) {
       } else if (err) {
         throw err;
       } else {
-        // Existe, verificar PIN
         if (data.pin !== pin.trim()) { setError("PIN incorrecto"); setLoading(false); return; }
         onLogin(data);
       }
@@ -655,7 +643,6 @@ export default function CartillaLillyPRO() {
   const [showConfig, setShowConfig] = useState(false);
   const [prefs, setPrefs] = useState(() => readLS("lilly_prefs", DEFAULT_PREFS));
 
-  // Escala por pelota
   const [mostrarCirculoEval, setMostrarCirculoEval] = useState(false);
   const [mostrarCirculoLearn, setMostrarCirculoLearn] = useState(false);
   const [escalaEval, setEscalaEval] = useState(null);
@@ -665,7 +652,6 @@ export default function CartillaLillyPRO() {
   const [rectEval, setRectEval] = useState(null);
   const [rectLearn, setRectLearn] = useState(null);
 
-  // Evaluación
   const [tronada, setTronada] = useState("");
   const [banco, setBanco] = useState("");
   const [sector, setSector] = useState("");
@@ -687,10 +673,8 @@ export default function CartillaLillyPRO() {
   const [realizadoPor, setRealizadoPor] = useState("");
   const [analisisIA, setAnalisisIA] = useState(null);
 
-  // Evaluaciones acumuladas del sector (para exportar en formato cartilla)
   const [evaluacionesSector, setEvaluacionesSector] = useState([]);
 
-  // Aprendizaje
   const [learnImage, setLearnImage] = useState(null);
   const [learnPreview, setLearnPreview] = useState("");
   const [learnIA, setLearnIA] = useState(null);
@@ -702,7 +686,6 @@ export default function CartillaLillyPRO() {
   const [historial, setHistorial] = useState([]);
   const [learningCases, setLearningCases] = useState([]);
 
-  // Inyectar CSS dinámico
   useEffect(() => {
     let style = document.getElementById("lilly-global-css");
     if (!style) { style = document.createElement("style"); style.id = "lilly-global-css"; document.head.appendChild(style); }
@@ -718,7 +701,6 @@ export default function CartillaLillyPRO() {
 
   const savePrefs = (p) => { setPrefs(p); writeLS("lilly_prefs", p); };
 
-  // ─── CÁLCULOS ──────────────────────────────────────────────────────────────
   const SG = pv(sg), RCU = pv(rcu), RMD = pv(rmd), JPS = pv(jps), JPO = pv(jpo);
   const datosValidos = SG > 0 && RCU > 0;
   const SGI = datosValidos ? 25 * SG - 50 : 0;
@@ -797,7 +779,6 @@ export default function CartillaLillyPRO() {
       return;
     }
     const r = crearRegistro();
-    // Guardar en Supabase
     const { error } = await supabase.from("historial").insert({
       evaluador: evaluador?.nombre || "",
       tronada: r.Tronada, banco: r.Banco, sector: r.Sector,
@@ -811,7 +792,6 @@ export default function CartillaLillyPRO() {
       observaciones: r.Observaciones,
     });
     if (error) { alert("Error al guardar en Supabase: " + error.message); return; }
-    // También guardar local para respaldo
     const actualizadoH = [r, ...historial];
     setHistorial(actualizadoH);
     writeLS("historial_lilly", actualizadoH);
@@ -844,7 +824,6 @@ export default function CartillaLillyPRO() {
     const ia = { rmd: Number(learnIA.rmd ?? 0), jps: Number(learnIA.jps ?? 0), jpo: Number(learnIA.jpo ?? 0) };
     const real = { rmd: pv(realRmd), jps: pv(realJps), jpo: pv(realJpo) };
     const nuevo = { Fecha: new Date().toLocaleString(), ArchivoImagen: learnImage?.name || "", ImagenBase64: learnPreview, ia, real, error: { rmd: real.rmd - ia.rmd, jps: real.jps - ia.jps, jpo: real.jpo - ia.jpo }, confianza: learnIA.confianza || "No indicada", observacion: learnObs, analisis: learnIA };
-    // Guardar en Supabase
     const { error } = await supabase.from("aprendizaje").insert({
       evaluador: evaluador?.nombre || "",
       archivo_imagen: learnImage?.name || "",
@@ -857,7 +836,6 @@ export default function CartillaLillyPRO() {
       analisis: learnIA,
     });
     if (error) { alert("Error al guardar en Supabase: " + error.message); return; }
-    // También guardar local
     const actualizado = [nuevo, ...learningCases];
     setLearningCases(actualizado);
     writeLS("lilly_learning", actualizado);
@@ -897,7 +875,6 @@ export default function CartillaLillyPRO() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   }, [learningCases]);
 
-  // ─── RENDER ────────────────────────────────────────────────────────────────
   if (!evaluador) return <PantallaLogin onLogin={setEvaluador} />;
 
   return (
@@ -967,7 +944,6 @@ export default function CartillaLillyPRO() {
                   <span style={{ cursor: "pointer", marginLeft: 6, color: "#ff4466" }} onClick={() => setEscalaEval(null)}>✕</span>
                 </div>
               )}
-              {/* Botón seleccionar zona */}
               {preview && !mostrarCirculoEval && !mostrarRectEval && (
                 <button className="lilly-btn btn-blue" onClick={() => setMostrarRectEval(true)}>⬡ Seleccionar zona</button>
               )}
