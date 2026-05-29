@@ -168,9 +168,16 @@ function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
   const [drawing, setDrawing] = useState(false);
   const [circle, setCircle] = useState(null);
   const [start, setStart] = useState(null);
-  const [diametro, setDiametro] = useState("15");
+  const [diametro, setDiametro] = useState("20");
   const [unidad, setUnidad] = useState("cm");
+  const [escalaManual, setEscalaManual] = useState("");
+  const [modoEscala, setModoEscala] = useState("pelota");
   const [imgSize, setImgSize] = useState({ w: 0, h: 0, natW: 0, natH: 0 });
+
+  const diametroValido = pv(diametro) > 0;
+  const circuloValido = circle && circle.r >= 5;
+  const escalaManualValida = pv(escalaManual) > 0;
+  const puedeConfirmar = modoEscala === "manual" ? escalaManualValida : diametroValido && circuloValido;
 
   useEffect(() => {
     const img = new Image();
@@ -190,10 +197,12 @@ function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
     canvas.addEventListener("wheel", prevent, { passive: false });
     canvas.addEventListener("touchmove", prevent, { passive: false });
     canvas.addEventListener("touchstart", prevent, { passive: false });
+    canvas.addEventListener("contextmenu", prevent);
     return () => {
       canvas.removeEventListener("wheel", prevent);
       canvas.removeEventListener("touchmove", prevent);
       canvas.removeEventListener("touchstart", prevent);
+      canvas.removeEventListener("contextmenu", prevent);
     };
   }, [imgSize]);
 
@@ -232,35 +241,62 @@ function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
     };
   };
 
-  const onMouseDown = (e) => {
+  const onPointerDown = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (modoEscala !== "pelota") return;
+    e.currentTarget.setPointerCapture(e.pointerId);
     const p = getPos(e);
     setStart(p);
     setDrawing(true);
     setCircle(null);
   };
-  const onMouseMove = (e) => {
+
+  const onPointerMove = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!drawing || !start) return;
+    if (modoEscala !== "pelota" || !drawing || !start) return;
     const p = getPos(e);
     const dx = p.x - start.x, dy = p.y - start.y;
     const r = Math.sqrt(dx * dx + dy * dy) / 2;
     const cx = start.x + dx / 2, cy = start.y + dy / 2;
     setCircle({ cx, cy, r });
   };
-  const onMouseUp = (e) => { if (e) { e.preventDefault(); e.stopPropagation(); } setDrawing(false); };
+
+  const onPointerUp = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+    }
+    setDrawing(false);
+  };
 
   const confirmar = () => {
-    if (!circle || circle.r < 5) { alert("Dibuja un círculo sobre la pelota primero"); return; }
+    if (modoEscala === "manual") {
+      const cmPorPixel = pv(escalaManual);
+      if (!cmPorPixel || cmPorPixel <= 0) {
+        alert("Ingresa una escala manual válida en cm/pixel");
+        return;
+      }
+      onEscalaCalculada({ cmPorPixel, diametroCm: null, diametroPx: null, modo: "manual" });
+      return;
+    }
+
+    if (!circle || circle.r < 5) {
+      alert("Dibuja un círculo sobre la pelota primero");
+      return;
+    }
     const d = pv(diametro);
-    if (!d || d <= 0) { alert("Ingresa el diámetro de la pelota"); return; }
+    if (!d || d <= 0) {
+      alert("Ingresa el diámetro real de la pelota");
+      return;
+    }
     const diametroCm = unidad === "mm" ? d / 10 : d;
     const scaleX = imgSize.natW / imgSize.w;
     const diametroPxNat = circle.r * 2 * scaleX;
     const cmPorPixel = diametroCm / diametroPxNat;
-    onEscalaCalculada({ cmPorPixel, diametroCm, diametroPx: diametroPxNat });
+    onEscalaCalculada({ cmPorPixel, diametroCm, diametroPx: diametroPxNat, modo: "pelota" });
   };
 
   if (!imgSize.w) return <div style={{ color: "#4a8faa", padding: 20 }}>Cargando imagen...</div>;
@@ -268,35 +304,99 @@ function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
   return (
     <div style={{ animation: "fadein 0.3s ease" }}>
       <p style={{ color: "#ffb86c", fontFamily: "'Share Tech Mono', monospace", fontSize: 12, marginBottom: 12 }}>
-        ⬡ Arrastra sobre la pelota para dibujar el círculo de referencia
+        ⬡ Define la escala: ingresa el diámetro real y dibuja la pelota, o usa una escala manual
       </p>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        <button
+          type="button"
+          className={modoEscala === "pelota" ? "lilly-btn btn-orange" : "lilly-btn btn-gray"}
+          style={{ marginTop: 0 }}
+          onClick={() => setModoEscala("pelota")}
+        >
+          ⬡ Pelota referencia
+        </button>
+        <button
+          type="button"
+          className={modoEscala === "manual" ? "lilly-btn btn-orange" : "lilly-btn btn-gray"}
+          style={{ marginTop: 0 }}
+          onClick={() => setModoEscala("manual")}
+        >
+          ⬡ Escala manual
+        </button>
+      </div>
+
       <canvas
         ref={canvasRef}
         width={imgSize.w}
         height={imgSize.h}
-        style={{ display: "block", border: "1px solid #0f2a45", cursor: "crosshair", maxWidth: "100%", touchAction: "none", userSelect: "none" }}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
+        style={{
+          display: "block",
+          border: "1px solid #0f2a45",
+          cursor: modoEscala === "pelota" ? "crosshair" : "not-allowed",
+          maxWidth: "100%",
+          touchAction: "none",
+          userSelect: "none",
+          WebkitUserSelect: "none",
+        }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onDragStart={(e) => e.preventDefault()}
       />
-      <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-        <div>
-          <div className="compare-label">Diámetro de la pelota</div>
-          <input className="lilly-input" style={{ width: 100, marginTop: 4 }} value={diametro}
-            onChange={(e) => setDiametro(e.target.value)} placeholder="ej: 15" />
+
+      {modoEscala === "pelota" ? (
+        <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div>
+            <div className="compare-label">Diámetro real de la pelota</div>
+            <input
+              className="lilly-input"
+              style={{ width: 120, marginTop: 4 }}
+              value={diametro}
+              onChange={(e) => setDiametro(e.target.value)}
+              placeholder="ej: 20"
+            />
+          </div>
+          <div>
+            <div className="compare-label">Unidad</div>
+            <select className="lilly-input" style={{ width: 90, marginTop: 4 }} value={unidad} onChange={(e) => setUnidad(e.target.value)}>
+              <option value="cm">cm</option>
+              <option value="mm">mm</option>
+            </select>
+          </div>
+          <div style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: 11, color: "#4a8faa", paddingBottom: 10, minWidth: 250 }}>
+            <div style={{ color: diametroValido ? "#00ff88" : "#ffb86c" }}>
+              {diametroValido ? "✓" : "○"} Diámetro real ingresado
+            </div>
+            <div style={{ color: circuloValido ? "#00ff88" : "#ffb86c" }}>
+              {circuloValido ? "✓" : "○"} Círculo dibujado sobre la pelota
+            </div>
+          </div>
+          <button className="lilly-btn btn-green" onClick={confirmar} disabled={!puedeConfirmar}>⬡ Confirmar escala</button>
+          <button className="lilly-btn btn-gray" onClick={onCancelar}>⬡ Cancelar</button>
         </div>
-        <div>
-          <div className="compare-label">Unidad</div>
-          <select className="lilly-input" style={{ width: 80, marginTop: 4 }} value={unidad} onChange={(e) => setUnidad(e.target.value)}>
-            <option value="cm">cm</option>
-            <option value="mm">mm</option>
-          </select>
+      ) : (
+        <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div>
+            <div className="compare-label">Escala manual cm/pixel</div>
+            <input
+              className="lilly-input"
+              style={{ width: 160, marginTop: 4 }}
+              value={escalaManual}
+              onChange={(e) => setEscalaManual(e.target.value)}
+              placeholder="ej: 0,05"
+            />
+          </div>
+          <div style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: 11, color: "#4a8faa", paddingBottom: 10, maxWidth: 420 }}>
+            Usa esta opción solo si ya conoces la escala real de la imagen. Ejemplo: 0,05 cm/pixel.
+          </div>
+          <button className="lilly-btn btn-green" onClick={confirmar} disabled={!puedeConfirmar}>⬡ Confirmar escala</button>
+          <button className="lilly-btn btn-gray" onClick={onCancelar}>⬡ Cancelar</button>
         </div>
-        <button className="lilly-btn btn-green" onClick={confirmar} disabled={!circle || circle.r < 5}>⬡ Confirmar escala</button>
-        <button className="lilly-btn btn-gray" onClick={onCancelar}>⬡ Cancelar</button>
-      </div>
-      {circle && circle.r >= 5 && (
+      )}
+
+      {modoEscala === "pelota" && circle && circle.r >= 5 && (
         <div style={{ marginTop: 8, fontFamily: "'Share Tech Mono', monospace", fontSize: 11, color: "#00ff88" }}>
           ✓ Círculo: {(circle.r * 2).toFixed(0)}px de diámetro
         </div>
@@ -304,6 +404,7 @@ function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
     </div>
   );
 }
+
 
 // ─── COMPONENTE RECTÁNGULO DE ZONA ───────────────────────────────────────────
 function RectanguloZona({ imgSrc, onZonaSeleccionada, onCancelar }) {
