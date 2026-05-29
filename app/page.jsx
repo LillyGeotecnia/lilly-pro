@@ -835,9 +835,35 @@ export default function CartillaLillyPRO() {
   }, [learnIA, realRmd, realJps, realJpo, learnImage, learnPreview, learnObs, learningCases, evaluador]);
 
   const exportarHistorialExcel = useCallback(() => {
-    if (historial.length === 0) { alert("No hay historial para exportar"); return; }
-    try { const ws = XLSX.utils.json_to_sheet(historial); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Historial"); XLSX.writeFile(wb, "Historial_Cartilla_Lilly.xlsx"); }
-    catch (e) { alert("Error: " + e.message); }
+    if (historial.length === 0) {
+      alert("No hay historial para exportar");
+      return;
+    }
+
+    try {
+      const dataLimpia = historial.map((r) => {
+        const copia = { ...r };
+
+        // Excel no soporta textos mayores a 32767 caracteres por celda.
+        // La imagen Base64 es muy larga, por eso no se exporta al historial Excel.
+        delete copia.ImagenBase64;
+
+        Object.keys(copia).forEach((key) => {
+          if (copia[key] != null && String(copia[key]).length > 32000) {
+            copia[key] = String(copia[key]).slice(0, 32000);
+          }
+        });
+
+        return copia;
+      });
+
+      const ws = XLSX.utils.json_to_sheet(dataLimpia);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Historial");
+      XLSX.writeFile(wb, "Historial_Cartilla_Lilly.xlsx");
+    } catch (e) {
+      alert("Error: " + e.message);
+    }
   }, [historial]);
 
   const exportarAprendizajeExcel = useCallback(() => {
