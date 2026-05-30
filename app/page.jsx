@@ -189,7 +189,6 @@ function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
     img.src = imgSrc;
   }, [imgSrc]);
 
-  // Bloquear scroll/zoom mientras el canvas está activo
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !imgSize.w) return;
@@ -235,26 +234,17 @@ function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
     const r = canvas.getBoundingClientRect();
     const scaleX = canvas.width / r.width;
     const scaleY = canvas.height / r.height;
-    return {
-      x: (e.clientX - r.left) * scaleX,
-      y: (e.clientY - r.top) * scaleY,
-    };
+    return { x: (e.clientX - r.left) * scaleX, y: (e.clientY - r.top) * scaleY };
   };
 
   const onPointerDown = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     if (modoEscala !== "pelota") return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    const p = getPos(e);
-    setStart(p);
-    setDrawing(true);
-    setCircle(null);
+    const p = getPos(e); setStart(p); setDrawing(true); setCircle(null);
   };
-
   const onPointerMove = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     if (modoEscala !== "pelota" || !drawing || !start) return;
     const p = getPos(e);
     const dx = p.x - start.x, dy = p.y - start.y;
@@ -262,36 +252,21 @@ function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
     const cx = start.x + dx / 2, cy = start.y + dy / 2;
     setCircle({ cx, cy, r });
   };
-
   const onPointerUp = (e) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
-    }
+    if (e) { e.preventDefault(); e.stopPropagation(); try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {} }
     setDrawing(false);
   };
 
   const confirmar = () => {
     if (modoEscala === "manual") {
       const cmPorPixel = pv(escalaManual);
-      if (!cmPorPixel || cmPorPixel <= 0) {
-        alert("Ingresa una escala manual válida en cm/pixel");
-        return;
-      }
+      if (!cmPorPixel || cmPorPixel <= 0) { alert("Ingresa una escala manual válida en cm/pixel"); return; }
       onEscalaCalculada({ cmPorPixel, diametroCm: null, diametroPx: null, modo: "manual" });
       return;
     }
-
-    if (!circle || circle.r < 5) {
-      alert("Dibuja un círculo sobre la pelota primero");
-      return;
-    }
+    if (!circle || circle.r < 5) { alert("Dibuja un círculo sobre la pelota primero"); return; }
     const d = pv(diametro);
-    if (!d || d <= 0) {
-      alert("Ingresa el diámetro real de la pelota");
-      return;
-    }
+    if (!d || d <= 0) { alert("Ingresa el diámetro real de la pelota"); return; }
     const diametroCm = unidad === "mm" ? d / 10 : d;
     const scaleX = imgSize.natW / imgSize.w;
     const diametroPxNat = circle.r * 2 * scaleX;
@@ -306,57 +281,18 @@ function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
       <p style={{ color: "#ffb86c", fontFamily: "'Share Tech Mono', monospace", fontSize: 12, marginBottom: 12 }}>
         ⬡ Define la escala: ingresa el diámetro real y dibuja la pelota, o usa una escala manual
       </p>
-
       <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-        <button
-          type="button"
-          className={modoEscala === "pelota" ? "lilly-btn btn-orange" : "lilly-btn btn-gray"}
-          style={{ marginTop: 0 }}
-          onClick={() => setModoEscala("pelota")}
-        >
-          ⬡ Pelota referencia
-        </button>
-        <button
-          type="button"
-          className={modoEscala === "manual" ? "lilly-btn btn-orange" : "lilly-btn btn-gray"}
-          style={{ marginTop: 0 }}
-          onClick={() => setModoEscala("manual")}
-        >
-          ⬡ Escala manual
-        </button>
+        <button type="button" className={modoEscala === "pelota" ? "lilly-btn btn-orange" : "lilly-btn btn-gray"} style={{ marginTop: 0 }} onClick={() => setModoEscala("pelota")}>⬡ Pelota referencia</button>
+        <button type="button" className={modoEscala === "manual" ? "lilly-btn btn-orange" : "lilly-btn btn-gray"} style={{ marginTop: 0 }} onClick={() => setModoEscala("manual")}>⬡ Escala manual</button>
       </div>
-
-      <canvas
-        ref={canvasRef}
-        width={imgSize.w}
-        height={imgSize.h}
-        style={{
-          display: "block",
-          border: "1px solid #0f2a45",
-          cursor: modoEscala === "pelota" ? "crosshair" : "not-allowed",
-          maxWidth: "100%",
-          touchAction: "none",
-          userSelect: "none",
-          WebkitUserSelect: "none",
-        }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        onDragStart={(e) => e.preventDefault()}
-      />
-
+      <canvas ref={canvasRef} width={imgSize.w} height={imgSize.h}
+        style={{ display: "block", border: "1px solid #0f2a45", cursor: modoEscala === "pelota" ? "crosshair" : "not-allowed", maxWidth: "100%", touchAction: "none", userSelect: "none", WebkitUserSelect: "none" }}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onDragStart={(e) => e.preventDefault()} />
       {modoEscala === "pelota" ? (
         <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
           <div>
             <div className="compare-label">Diámetro real de la pelota</div>
-            <input
-              className="lilly-input"
-              style={{ width: 120, marginTop: 4 }}
-              value={diametro}
-              onChange={(e) => setDiametro(e.target.value)}
-              placeholder="ej: 20"
-            />
+            <input className="lilly-input" style={{ width: 120, marginTop: 4 }} value={diametro} onChange={(e) => setDiametro(e.target.value)} placeholder="ej: 20" />
           </div>
           <div>
             <div className="compare-label">Unidad</div>
@@ -366,12 +302,8 @@ function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
             </select>
           </div>
           <div style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: 11, color: "#4a8faa", paddingBottom: 10, minWidth: 250 }}>
-            <div style={{ color: diametroValido ? "#00ff88" : "#ffb86c" }}>
-              {diametroValido ? "✓" : "○"} Diámetro real ingresado
-            </div>
-            <div style={{ color: circuloValido ? "#00ff88" : "#ffb86c" }}>
-              {circuloValido ? "✓" : "○"} Círculo dibujado sobre la pelota
-            </div>
+            <div style={{ color: diametroValido ? "#00ff88" : "#ffb86c" }}>{diametroValido ? "✓" : "○"} Diámetro real ingresado</div>
+            <div style={{ color: circuloValido ? "#00ff88" : "#ffb86c" }}>{circuloValido ? "✓" : "○"} Círculo dibujado sobre la pelota</div>
           </div>
           <button className="lilly-btn btn-green" onClick={confirmar} disabled={!puedeConfirmar}>⬡ Confirmar escala</button>
           <button className="lilly-btn btn-gray" onClick={onCancelar}>⬡ Cancelar</button>
@@ -380,13 +312,7 @@ function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
         <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
           <div>
             <div className="compare-label">Escala manual cm/pixel</div>
-            <input
-              className="lilly-input"
-              style={{ width: 160, marginTop: 4 }}
-              value={escalaManual}
-              onChange={(e) => setEscalaManual(e.target.value)}
-              placeholder="ej: 0,05"
-            />
+            <input className="lilly-input" style={{ width: 160, marginTop: 4 }} value={escalaManual} onChange={(e) => setEscalaManual(e.target.value)} placeholder="ej: 0,05" />
           </div>
           <div style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: 11, color: "#4a8faa", paddingBottom: 10, maxWidth: 420 }}>
             Usa esta opción solo si ya conoces la escala real de la imagen. Ejemplo: 0,05 cm/pixel.
@@ -395,7 +321,6 @@ function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
           <button className="lilly-btn btn-gray" onClick={onCancelar}>⬡ Cancelar</button>
         </div>
       )}
-
       {modoEscala === "pelota" && circle && circle.r >= 5 && (
         <div style={{ marginTop: 8, fontFamily: "'Share Tech Mono', monospace", fontSize: 11, color: "#00ff88" }}>
           ✓ Círculo: {(circle.r * 2).toFixed(0)}px de diámetro
@@ -404,7 +329,6 @@ function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
     </div>
   );
 }
-
 
 // ─── COMPONENTE RECTÁNGULO DE ZONA ───────────────────────────────────────────
 function RectanguloZona({ imgSrc, onZonaSeleccionada, onCancelar }) {
@@ -427,17 +351,12 @@ function RectanguloZona({ imgSrc, onZonaSeleccionada, onCancelar }) {
   const redraw = useCallback((currentRect) => {
     const canvas = canvasRef.current;
     if (!canvas || !imgSize.h) return;
-
     const ctx = canvas.getContext("2d");
     const img = new Image();
-
     img.onload = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
       if (currentRect && currentRect.w > 0 && currentRect.h > 0) {
-        // Oscurece todo menos el área seleccionada, SIN redibujar la imagen dentro del rectángulo.
-        // Así se evita el efecto de zoom al seleccionar la zona.
         ctx.save();
         ctx.fillStyle = "rgba(0,0,0,0.5)";
         ctx.beginPath();
@@ -445,38 +364,19 @@ function RectanguloZona({ imgSrc, onZonaSeleccionada, onCancelar }) {
         ctx.rect(currentRect.x, currentRect.y, currentRect.w, currentRect.h);
         ctx.fill("evenodd");
         ctx.restore();
-
-        ctx.strokeStyle = "#00c8ff";
-        ctx.lineWidth = 2;
-        ctx.setLineDash([6, 3]);
+        ctx.strokeStyle = "#00c8ff"; ctx.lineWidth = 2; ctx.setLineDash([6, 3]);
         ctx.strokeRect(currentRect.x, currentRect.y, currentRect.w, currentRect.h);
         ctx.setLineDash([]);
-
-        const cs = 10;
-        ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 2;
-        [
-          [currentRect.x, currentRect.y],
-          [currentRect.x + currentRect.w, currentRect.y],
-          [currentRect.x, currentRect.y + currentRect.h],
-          [currentRect.x + currentRect.w, currentRect.y + currentRect.h],
-        ].forEach(([cx, cy]) => {
-          const sx = cx === currentRect.x ? 1 : -1;
-          const sy = cy === currentRect.y ? 1 : -1;
-          ctx.beginPath();
-          ctx.moveTo(cx, cy + sy * cs);
-          ctx.lineTo(cx, cy);
-          ctx.lineTo(cx + sx * cs, cy);
-          ctx.stroke();
+        const cs = 10; ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
+        [[currentRect.x, currentRect.y],[currentRect.x+currentRect.w, currentRect.y],[currentRect.x, currentRect.y+currentRect.h],[currentRect.x+currentRect.w, currentRect.y+currentRect.h]].forEach(([cx, cy]) => {
+          const sx = cx === currentRect.x ? 1 : -1; const sy = cy === currentRect.y ? 1 : -1;
+          ctx.beginPath(); ctx.moveTo(cx, cy+sy*cs); ctx.lineTo(cx, cy); ctx.lineTo(cx+sx*cs, cy); ctx.stroke();
         });
-
-        ctx.fillStyle = "#00c8ff";
-        ctx.font = "bold 12px monospace";
+        ctx.fillStyle = "#00c8ff"; ctx.font = "bold 12px monospace";
         const labelY = currentRect.y > 20 ? currentRect.y - 6 : currentRect.y + currentRect.h + 16;
         ctx.fillText(`${Math.round(currentRect.w)}×${Math.round(currentRect.h)}px`, currentRect.x + 4, labelY);
       }
     };
-
     img.src = imgSrc;
   }, [imgSize, imgSrc]);
 
@@ -492,86 +392,40 @@ function RectanguloZona({ imgSrc, onZonaSeleccionada, onCancelar }) {
   };
 
   const handlePointerDown = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
-    const p = getPos(e);
-    startRef.current = p;
-    drawingRef.current = true;
-    setRect(null);
+    const p = getPos(e); startRef.current = p; drawingRef.current = true; setRect(null);
   };
-
   const handlePointerMove = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     if (!drawingRef.current || !startRef.current) return;
     const p = getPos(e);
-    const newRect = {
-      x: Math.min(startRef.current.x, p.x),
-      y: Math.min(startRef.current.y, p.y),
-      w: Math.abs(p.x - startRef.current.x),
-      h: Math.abs(p.y - startRef.current.y),
-    };
-    setRect(newRect);
+    setRect({ x: Math.min(startRef.current.x, p.x), y: Math.min(startRef.current.y, p.y), w: Math.abs(p.x - startRef.current.x), h: Math.abs(p.y - startRef.current.y) });
   };
-
   const handlePointerUp = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    drawingRef.current = false;
+    e.preventDefault(); e.stopPropagation(); drawingRef.current = false;
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
   };
 
   const confirmar = () => {
     if (!rect || rect.w < 20 || rect.h < 20) { alert("Dibuja un área más grande para analizar"); return; }
-    const scaleX = imgSize.natW / imgSize.w;
-    const scaleY = imgSize.natH / imgSize.h;
-    onZonaSeleccionada({
-      x: rect.x * scaleX,
-      y: rect.y * scaleY,
-      w: rect.w * scaleX,
-      h: rect.h * scaleY,
-      displayRect: rect,
-    });
+    const scaleX = imgSize.natW / imgSize.w; const scaleY = imgSize.natH / imgSize.h;
+    onZonaSeleccionada({ x: rect.x * scaleX, y: rect.y * scaleY, w: rect.w * scaleX, h: rect.h * scaleY, displayRect: rect });
   };
 
   if (!imgSize.h) return <div style={{ color: "#4a8faa", padding: 20 }}>Cargando imagen...</div>;
 
   return (
     <div style={{ animation: "fadein 0.3s ease" }}>
-      <p style={{ color: "#00c8ff", fontFamily: "'Share Tech Mono', monospace", fontSize: 12, marginBottom: 12 }}>
-        ⬡ Arrastra para seleccionar la zona a analizar
-      </p>
-      <canvas
-        ref={canvasRef}
-        width={imgSize.w}
-        height={imgSize.h}
-        style={{
-          display: "block",
-          border: "1px solid #0f4060",
-          cursor: "crosshair",
-          maxWidth: "100%",
-          height: "auto",
-          userSelect: "none",
-          touchAction: "none",
-          WebkitUserSelect: "none",
-          MozUserSelect: "none",
-        }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onContextMenu={(e) => e.preventDefault()}
-        onDragStart={(e) => e.preventDefault()}
-      />
+      <p style={{ color: "#00c8ff", fontFamily: "'Share Tech Mono', monospace", fontSize: 12, marginBottom: 12 }}>⬡ Arrastra para seleccionar la zona a analizar</p>
+      <canvas ref={canvasRef} width={imgSize.w} height={imgSize.h}
+        style={{ display: "block", border: "1px solid #0f4060", cursor: "crosshair", maxWidth: "100%", height: "auto", userSelect: "none", touchAction: "none", WebkitUserSelect: "none", MozUserSelect: "none" }}
+        onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp}
+        onContextMenu={(e) => e.preventDefault()} onDragStart={(e) => e.preventDefault()} />
       <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
         <button className="lilly-btn btn-green" onClick={confirmar} disabled={!rect || rect.w < 20}>⬡ Confirmar zona</button>
         <button className="lilly-btn btn-gray" onClick={onCancelar}>⬡ Cancelar</button>
-        {rect && rect.w >= 20 && (
-          <span style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: 11, color: "#00c8ff" }}>
-            ✓ Zona: {Math.round(rect.w)}×{Math.round(rect.h)}px
-          </span>
-        )}
+        {rect && rect.w >= 20 && <span style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: 11, color: "#00c8ff" }}>✓ Zona: {Math.round(rect.w)}×{Math.round(rect.h)}px</span>}
       </div>
     </div>
   );
@@ -581,58 +435,35 @@ function RectanguloZona({ imgSrc, onZonaSeleccionada, onCancelar }) {
 function PanelConfig({ prefs, onSave, onClose }) {
   const [local, setLocal] = useState({ ...prefs });
   return (
-    <div style={{
-      position: "fixed", right: 80, bottom: 80, width: 320, zIndex: 1000,
-      background: "rgba(6,13,26,0.98)", border: "1px solid #0f4060",
-      padding: 20, animation: "fadein 0.25s ease",
-      clipPath: "polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px))",
-      boxShadow: "0 0 30px rgba(0,200,255,0.15)",
-    }}>
-      <div style={{ fontFamily: "'Orbitron', monospace", fontSize: 10, letterSpacing: 3, color: "#00c8ff", marginBottom: 16 }}>
-        ⚙ CONFIGURACIÓN
-      </div>
+    <div style={{ position: "fixed", right: 80, bottom: 80, width: 320, zIndex: 1000, background: "rgba(6,13,26,0.98)", border: "1px solid #0f4060", padding: 20, animation: "fadein 0.25s ease", clipPath: "polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px))", boxShadow: "0 0 30px rgba(0,200,255,0.15)" }}>
+      <div style={{ fontFamily: "'Orbitron', monospace", fontSize: 10, letterSpacing: 3, color: "#00c8ff", marginBottom: 16 }}>⚙ CONFIGURACIÓN</div>
       <div style={{ marginBottom: 14 }}>
         <div className="compare-label">Tamaño de letra: {local.fontSize}px</div>
-        <input type="range" min={12} max={18} step={1} value={local.fontSize}
-          onChange={(e) => setLocal(p => ({ ...p, fontSize: Number(e.target.value) }))}
-          style={{ width: "100%", marginTop: 6, accentColor: "#00c8ff" }} />
-        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "'Share Tech Mono', monospace", fontSize: 10, color: "#2a5070" }}>
-          <span>12px</span><span>15px</span><span>18px</span>
-        </div>
+        <input type="range" min={12} max={18} step={1} value={local.fontSize} onChange={(e) => setLocal(p => ({ ...p, fontSize: Number(e.target.value) }))} style={{ width: "100%", marginTop: 6, accentColor: "#00c8ff" }} />
+        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "'Share Tech Mono', monospace", fontSize: 10, color: "#2a5070" }}><span>12px</span><span>15px</span><span>18px</span></div>
       </div>
       <div style={{ marginBottom: 14 }}>
         <div className="compare-label" style={{ marginBottom: 8 }}>Color de fondo</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-          {BG_PRESETS.map(p => (
-            <div key={p.value} onClick={() => setLocal(lp => ({ ...lp, bgColor: p.value }))}
-              title={p.label}
-              style={{ width: 28, height: 28, background: p.value, cursor: "pointer", border: local.bgColor === p.value ? "2px solid #00c8ff" : "1px solid #0f2a45", borderRadius: 2 }} />
-          ))}
+          {BG_PRESETS.map(p => (<div key={p.value} onClick={() => setLocal(lp => ({ ...lp, bgColor: p.value }))} title={p.label} style={{ width: 28, height: 28, background: p.value, cursor: "pointer", border: local.bgColor === p.value ? "2px solid #00c8ff" : "1px solid #0f2a45", borderRadius: 2 }} />))}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div className="compare-label">Personalizado:</div>
-          <input type="color" value={local.bgColor}
-            onChange={(e) => setLocal(p => ({ ...p, bgColor: e.target.value }))}
-            style={{ width: 36, height: 28, cursor: "pointer", background: "none", border: "1px solid #0f2a45", padding: 2 }} />
+          <input type="color" value={local.bgColor} onChange={(e) => setLocal(p => ({ ...p, bgColor: e.target.value }))} style={{ width: 36, height: 28, cursor: "pointer", background: "none", border: "1px solid #0f2a45", padding: 2 }} />
           <span style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: 11, color: "#4a8faa" }}>{local.bgColor}</span>
         </div>
       </div>
       <div style={{ marginBottom: 16 }}>
         <div className="compare-label" style={{ marginBottom: 8 }}>Color de acento</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {["#00c8ff","#00ff88","#ff8800","#c864ff","#ff4466"].map(c => (
-            <div key={c} onClick={() => setLocal(p => ({ ...p, accentColor: c }))}
-              style={{ width: 24, height: 24, background: c, cursor: "pointer", borderRadius: "50%", border: local.accentColor === c ? "2px solid white" : "1px solid #0f2a45" }} />
-          ))}
-          <input type="color" value={local.accentColor}
-            onChange={(e) => setLocal(p => ({ ...p, accentColor: e.target.value }))}
-            style={{ width: 28, height: 24, cursor: "pointer", background: "none", border: "1px solid #0f2a45", padding: 1 }} />
+          {["#00c8ff","#00ff88","#ff8800","#c864ff","#ff4466"].map(c => (<div key={c} onClick={() => setLocal(p => ({ ...p, accentColor: c }))} style={{ width: 24, height: 24, background: c, cursor: "pointer", borderRadius: "50%", border: local.accentColor === c ? "2px solid white" : "1px solid #0f2a45" }} />))}
+          <input type="color" value={local.accentColor} onChange={(e) => setLocal(p => ({ ...p, accentColor: e.target.value }))} style={{ width: 28, height: 24, cursor: "pointer", background: "none", border: "1px solid #0f2a45", padding: 1 }} />
         </div>
       </div>
       <div style={{ display: "flex", gap: 8 }}>
         <button className="lilly-btn btn-green" style={{ marginTop: 0, flex: 1 }} onClick={() => { onSave(local); onClose(); }}>⬡ Guardar</button>
-        <button className="lilly-btn btn-gray"  style={{ marginTop: 0 }} onClick={() => { onSave(DEFAULT_PREFS); onClose(); }}>↺</button>
-        <button className="lilly-btn btn-gray"  style={{ marginTop: 0 }} onClick={onClose}>✕</button>
+        <button className="lilly-btn btn-gray" style={{ marginTop: 0 }} onClick={() => { onSave(DEFAULT_PREFS); onClose(); }}>↺</button>
+        <button className="lilly-btn btn-gray" style={{ marginTop: 0 }} onClick={onClose}>✕</button>
       </div>
     </div>
   );
@@ -662,18 +493,18 @@ function exportarCartillaExcel(evaluaciones, datosGenerales) {
   aoa.push(["Índice de tronabilidad según Lilly (Estimación de Factor de Carga)"]);
   const getColLabel = (i) => { if (i < 26) return String.fromCharCode(65 + i); return String.fromCharCode(65 + Math.floor(i / 26) - 1) + String.fromCharCode(65 + (i % 26)); };
   aoa.push(["Parámetro", "Descripción", "Ratings", "Valor", ...evaluaciones.map((_, i) => `Celda ${getColLabel(i)}`), "Observaciones"]);
-  aoa.push(["RMD", "Descripción del macizo rocoso.", "Poco Consolidado", 10, ...evaluaciones.map(e => e.rmd == 10 ? 10 : ""), ""]);
+  aoa.push(["RMD", "Descripción del macizo rocoso.", "Poco Consolidado", 10, ...evaluaciones.map(e => e.rmd <= 14 ? e.rmd : ""), ""]);
   aoa.push(["", "", "Diaclasado en Bloques (0.5m)", 20, ...evaluaciones.map(e => e.rmd >= 15 && e.rmd <= 25 ? e.rmd : ""), ""]);
   aoa.push(["", "", "Diaclasado en Bloques (1.0 m)", 30, ...evaluaciones.map(e => e.rmd >= 26 && e.rmd <= 35 ? e.rmd : ""), ""]);
   aoa.push(["", "", "Diaclasado en Bloques (>1 m)", 40, ...evaluaciones.map(e => e.rmd >= 36 && e.rmd <= 45 ? e.rmd : ""), ""]);
   aoa.push(["", "", "Masivo", 50, ...evaluaciones.map(e => e.rmd >= 46 ? e.rmd : ""), ""]);
   aoa.push(["JPS", "Espaciamiento entre fracturas.", "Pequeño ( < 0.1 m)", 10, ...evaluaciones.map(e => e.jps <= 15 ? e.jps : ""), ""]);
-  aoa.push(["", "", "Intermedio ( 0.1 m a 1.0 m)", 20, ...evaluaciones.map(e => e.jps > 15 && e.jps < 45 ? e.jps : ""), ""]);
-  aoa.push(["", "", "Grande ( > 1.0 m)", 50, ...evaluaciones.map(e => e.jps >= 45 ? e.jps : ""), ""]);
-  aoa.push(["JPO", "Orientación de los planos de fractura.", "Horizontal (a)", 10, ...evaluaciones.map(e => e.jpo <= 15 ? e.jpo : ""), ""]);
-  aoa.push(["", "", "Manteo hacia la cara (b)", 20, ...evaluaciones.map(e => e.jpo > 15 && e.jpo <= 25 ? e.jpo : ""), ""]);
-  aoa.push(["", "", "Rumbo normal a la cara (c)", 30, ...evaluaciones.map(e => e.jpo > 25 && e.jpo <= 35 ? e.jpo : ""), ""]);
-  aoa.push(["", "", "Manteo contra la cara (d)", 40, ...evaluaciones.map(e => e.jpo > 35 ? e.jpo : ""), ""]);
+  aoa.push(["", "", "Intermedio ( 0.1 m a 1.0 m)", 20, ...evaluaciones.map(e => e.jps > 15 && e.jps < 40 ? e.jps : ""), ""]);
+  aoa.push(["", "", "Grande ( > 1.0 m)", 50, ...evaluaciones.map(e => e.jps >= 40 ? e.jps : ""), ""]);
+  aoa.push(["JPO", "Orientación de los planos de fractura.", "Horizontal (a)", 10, ...evaluaciones.map(e => e.jpo <= 14 ? e.jpo : ""), ""]);
+  aoa.push(["", "", "Manteo hacia la cara (b)", 20, ...evaluaciones.map(e => e.jpo >= 15 && e.jpo <= 24 ? e.jpo : ""), ""]);
+  aoa.push(["", "", "Rumbo normal a la cara (c)", 30, ...evaluaciones.map(e => e.jpo >= 25 && e.jpo <= 34 ? e.jpo : ""), ""]);
+  aoa.push(["", "", "Manteo contra la cara (d)", 40, ...evaluaciones.map(e => e.jpo >= 35 ? e.jpo : ""), ""]);
   aoa.push(["SGI", "Influencia de la densidad de la roca.", "SGI = 25 * SG - 50", "", ...evaluaciones.map(e => e.sgi || ""), ""]);
   aoa.push(["HD", "Dureza de la Roca", "HD = 0.05 x RCU", "", ...evaluaciones.map(e => e.hd || ""), "También puede utilizarse RCU: HD = 0.05 x RCU"]);
   aoa.push(["BI", "Índice de Tronabilidad", "BI = 0.5 x (RMD + JPS + JPO + SGI + HD)", "", ...evaluaciones.map(e => e.bi || ""), ""]);
@@ -706,9 +537,8 @@ function PantallaLogin({ onLogin }) {
         const { data: nuevo, error: errCreate } = await supabase.from("evaluadores").insert({ nombre: nombre.trim(), pin: pin.trim() }).select().single();
         if (errCreate) throw errCreate;
         onLogin(nuevo);
-      } else if (err) {
-        throw err;
-      } else {
+      } else if (err) { throw err; }
+      else {
         if (data.pin !== pin.trim()) { setError("PIN incorrecto"); setLoading(false); return; }
         onLogin(data);
       }
@@ -724,22 +554,17 @@ function PantallaLogin({ onLogin }) {
         <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 11, color: "#3a80a0", letterSpacing: 3, textAlign: "center", marginBottom: 32, textTransform: "uppercase" }}>Acceso al sistema</div>
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontFamily: "'Orbitron', monospace", fontSize: 8, letterSpacing: 2, color: "#4a8faa", marginBottom: 6, textTransform: "uppercase" }}>Nombre del evaluador</div>
-          <input style={{ display: "block", width: "100%", padding: "10px 14px", background: "#03070f", color: "#c8dff0", border: "1px solid #0f2a45", outline: "none", fontFamily: "'Share Tech Mono', monospace", fontSize: 14, clipPath: "polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%)" }}
-            placeholder="Tu nombre" value={nombre} onChange={e => setNombre(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()} />
+          <input style={{ display: "block", width: "100%", padding: "10px 14px", background: "#03070f", color: "#c8dff0", border: "1px solid #0f2a45", outline: "none", fontFamily: "'Share Tech Mono', monospace", fontSize: 14, clipPath: "polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%)" }} placeholder="Tu nombre" value={nombre} onChange={e => setNombre(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()} />
         </div>
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontFamily: "'Orbitron', monospace", fontSize: 8, letterSpacing: 2, color: "#4a8faa", marginBottom: 6, textTransform: "uppercase" }}>PIN (4 dígitos)</div>
-          <input style={{ display: "block", width: "100%", padding: "10px 14px", background: "#03070f", color: "#c8dff0", border: "1px solid #0f2a45", outline: "none", fontFamily: "'Share Tech Mono', monospace", fontSize: 14, clipPath: "polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%)" }}
-            placeholder="****" type="password" maxLength={4} value={pin} onChange={e => setPin(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()} />
+          <input style={{ display: "block", width: "100%", padding: "10px 14px", background: "#03070f", color: "#c8dff0", border: "1px solid #0f2a45", outline: "none", fontFamily: "'Share Tech Mono', monospace", fontSize: 14, clipPath: "polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%)" }} placeholder="****" type="password" maxLength={4} value={pin} onChange={e => setPin(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()} />
         </div>
         {error && <div style={{ color: "#ff4466", fontFamily: "'Share Tech Mono', monospace", fontSize: 12, marginBottom: 16 }}>{error}</div>}
-        <button onClick={handleLogin} disabled={loading}
-          style={{ width: "100%", padding: "12px", background: "linear-gradient(135deg, #0050b3, #0080ff)", border: "1px solid #0080ff55", color: "white", fontFamily: "'Orbitron', monospace", fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, clipPath: "polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))" }}>
+        <button onClick={handleLogin} disabled={loading} style={{ width: "100%", padding: "12px", background: "linear-gradient(135deg, #0050b3, #0080ff)", border: "1px solid #0080ff55", color: "white", fontFamily: "'Orbitron', monospace", fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, clipPath: "polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))" }}>
           {loading ? "Verificando..." : "⬡ Ingresar"}
         </button>
-        <p style={{ color: "#2a5070", fontSize: 11, marginTop: 16, textAlign: "center", lineHeight: 1.5, fontFamily: "'Rajdhani', sans-serif" }}>
-          Primera vez? Tu cuenta se crea automáticamente con el PIN que elijas.
-        </p>
+        <p style={{ color: "#2a5070", fontSize: 11, marginTop: 16, textAlign: "center", lineHeight: 1.5, fontFamily: "'Rajdhani', sans-serif" }}>Primera vez? Tu cuenta se crea automáticamente con el PIN que elijas.</p>
       </div>
     </div>
   );
@@ -824,11 +649,30 @@ export default function CartillaLillyPRO() {
     };
   }, [learningCases]);
 
+  // ─── LIMPIAR CAMPOS EVALUACIÓN ──────────────────────────────────────────────
+  const limpiarCamposEvaluacion = useCallback(() => {
+    setImagen(null); setPreview(""); setEscalaEval(null);
+    setMostrarCirculoEval(false); setRectEval(null); setMostrarRectEval(false);
+    setRmd(""); setJps(""); setJpo("");
+    setSg(""); setRcu(""); setRqd(""); setFf(""); setAgua("");
+    setObservaciones(""); setAnalisisIA(null);
+    setTimeout(() => { document.body.click(); document.body.focus(); }, 100);
+  }, []);
+
+  // ─── LIMPIAR CAMPOS APRENDIZAJE ─────────────────────────────────────────────
+  const limpiarCamposAprendizaje = useCallback(() => {
+    setLearnImage(null); setLearnPreview(""); setEscalaLearn(null);
+    setMostrarCirculoLearn(false); setRectLearn(null); setMostrarRectLearn(false);
+    setLearnIA(null); setRealRmd(""); setRealJps(""); setRealJpo(""); setLearnObs("");
+    setTimeout(() => { document.body.click(); document.body.focus(); }, 100);
+  }, []);
+
   const seleccionarImagen = (file, tipo) => {
     const reader = new FileReader();
     reader.onloadend = () => {
       if (tipo === "evaluacion") { setImagen(file); setPreview(reader.result); setEscalaEval(null); setMostrarCirculoEval(false); setRectEval(null); setMostrarRectEval(false); }
       else { setLearnImage(file); setLearnPreview(reader.result); setEscalaLearn(null); setMostrarCirculoLearn(false); setRectLearn(null); setMostrarRectLearn(false); }
+      setTimeout(() => { document.body.click(); document.body.focus(); }, 100);
     };
     reader.readAsDataURL(file);
   };
@@ -893,14 +737,14 @@ export default function CartillaLillyPRO() {
     });
     if (error) { alert("Error al guardar en Supabase: " + error.message); return; }
     const actualizadoH = [r, ...historial];
-    setHistorial(actualizadoH);
-    writeLS("historial_lilly", actualizadoH);
+    setHistorial(actualizadoH); writeLS("historial_lilly", actualizadoH);
     const evalSector = { rmd: pv(rmd), jps: pv(jps), jpo: pv(jpo), sgi: SGI, hd: HD, bi: BI, fc: FC, imagen: imagen?.name || "" };
     const actualizadoS = [...evaluacionesSector, evalSector];
-    setEvaluacionesSector(actualizadoS);
-    writeLS("lilly_sector", actualizadoS);
+    setEvaluacionesSector(actualizadoS); writeLS("lilly_sector", actualizadoS);
     alert("✓ Evaluación guardada");
-  }, [datosValidos, crearRegistro, historial, rmd, jps, jpo, SGI, HD, BI, FC, imagen, evaluacionesSector, evaluador]);
+    // ── LIMPIAR AUTOMÁTICAMENTE TRAS GUARDAR ──
+    limpiarCamposEvaluacion();
+  }, [datosValidos, crearRegistro, historial, rmd, jps, jpo, SGI, HD, BI, FC, imagen, evaluacionesSector, evaluador, limpiarCamposEvaluacion]);
 
   const limpiarSector = () => {
     if (!window.confirm("¿Limpiar las evaluaciones del sector actual para iniciar uno nuevo?")) return;
@@ -933,45 +777,30 @@ export default function CartillaLillyPRO() {
     const actualizado = [nuevo, ...learningCases];
     setLearningCases(actualizado); writeLS("lilly_learning", actualizado);
     alert("✓ Caso de aprendizaje guardado");
-  }, [learnIA, realRmd, realJps, realJpo, learnImage, learnPreview, learnObs, learningCases, evaluador]);
+    // ── LIMPIAR AUTOMÁTICAMENTE TRAS GUARDAR ──
+    limpiarCamposAprendizaje();
+  }, [learnIA, realRmd, realJps, realJpo, learnImage, learnPreview, learnObs, learningCases, evaluador, limpiarCamposAprendizaje]);
 
   const exportarHistorialExcel = useCallback(() => {
-    if (historial.length === 0) {
-      alert("No hay historial para exportar");
-      return;
-    }
-
+    if (historial.length === 0) { alert("No hay historial para exportar"); return; }
     try {
       const dataLimpia = historial.map((r) => {
         const copia = { ...r };
-
-        // Excel no soporta textos mayores a 32767 caracteres por celda.
-        // La imagen Base64 es muy larga, por eso no se exporta al historial Excel.
         delete copia.ImagenBase64;
-
-        Object.keys(copia).forEach((key) => {
-          if (copia[key] != null && String(copia[key]).length > 32000) {
-            copia[key] = String(copia[key]).slice(0, 32000);
-          }
-        });
-
+        Object.keys(copia).forEach((key) => { if (copia[key] != null && String(copia[key]).length > 32000) { copia[key] = String(copia[key]).slice(0, 32000); } });
         return copia;
       });
-
-      const ws = XLSX.utils.json_to_sheet(dataLimpia);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Historial");
-      XLSX.writeFile(wb, "Historial_Cartilla_Lilly.xlsx");
-    } catch (e) {
-      alert("Error: " + e.message);
-    }
+      const ws = XLSX.utils.json_to_sheet(dataLimpia); const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Historial"); XLSX.writeFile(wb, "Historial_Cartilla_Lilly.xlsx");
+    } catch (e) { alert("Error: " + e.message); }
   }, [historial]);
 
   const exportarAprendizajeExcel = useCallback(() => {
     if (learningCases.length === 0) { alert("No hay casos de aprendizaje"); return; }
     try {
       const data = learningCases.map((c) => ({ Fecha: c.Fecha, Imagen: c.ArchivoImagen, RMD_IA: c.ia.rmd, RMD_REAL: c.real.rmd, ERROR_RMD: c.error.rmd, JPS_IA: c.ia.jps, JPS_REAL: c.real.jps, ERROR_JPS: c.error.jps, JPO_IA: c.ia.jpo, JPO_REAL: c.real.jpo, ERROR_JPO: c.error.jpo, Confianza: c.confianza, Observacion: c.observacion }));
-      const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Aprendizaje_IA"); XLSX.writeFile(wb, "Base_Aprendizaje_IA_Lilly.xlsx");
+      const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Aprendizaje_IA"); XLSX.writeFile(wb, "Base_Aprendizaje_IA_Lilly.xlsx");
     } catch (e) { alert("Error: " + e.message); }
   }, [learningCases]);
 
@@ -1034,8 +863,7 @@ export default function CartillaLillyPRO() {
             </div>
             <div className="lilly-card">
               <div className="section-label">Fotografía del macizo</div>
-              <input id="fileEval" type="file" style={{ display: "none" }} accept="image/*"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) seleccionarImagen(f, "evaluacion"); }} />
+              <input id="fileEval" type="file" style={{ display: "none" }} accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) seleccionarImagen(f, "evaluacion"); }} />
               <div style={{ display: "flex", flexWrap: "wrap" }}>
                 <button className="lilly-btn btn-blue" onClick={() => document.getElementById("fileEval").click()}>⬡ Seleccionar imagen</button>
                 {preview && !mostrarCirculoEval && <button className="lilly-btn btn-orange" onClick={() => setMostrarCirculoEval(true)}>⬡ Calibrar escala</button>}
@@ -1045,7 +873,7 @@ export default function CartillaLillyPRO() {
               </div>
               {imagen && <div className="file-tag"><span style={{ color: prefs.accentColor }}>■</span>{imagen.name}</div>}
               {escalaEval && (
-                <div className="scale-badge">⬡ Escala: 1px = {escalaEval.cmPorPixel.toFixed(4)}cm · Pelota {escalaEval.diametroCm}cm
+                <div className="scale-badge">⬡ Escala: 1px = {escalaEval.cmPorPixel.toFixed(4)}cm · {escalaEval.modo === "manual" ? "Manual" : `Pelota ${escalaEval.diametroCm}cm`}
                   <span style={{ cursor: "pointer", marginLeft: 6, color: "#ff4466" }} onClick={() => setEscalaEval(null)}>✕</span>
                 </div>
               )}
@@ -1075,13 +903,7 @@ export default function CartillaLillyPRO() {
                   <div style={{ position: "relative", marginTop: 14 }}>
                     <img src={preview} alt="Vista previa" className="img-preview" />
                     {rectEval && (
-                      <div style={{
-                        position: "absolute",
-                        left: rectEval.displayRect.x / (rectEval.w / rectEval.displayRect.w),
-                        top: rectEval.displayRect.y / (rectEval.h / rectEval.displayRect.h),
-                        width: rectEval.displayRect.w, height: rectEval.displayRect.h,
-                        border: "2px dashed #00c8ff", background: "rgba(0,200,255,0.08)", pointerEvents: "none",
-                      }} />
+                      <div style={{ position: "absolute", left: rectEval.displayRect.x / (rectEval.w / rectEval.displayRect.w), top: rectEval.displayRect.y / (rectEval.h / rectEval.displayRect.h), width: rectEval.displayRect.w, height: rectEval.displayRect.h, border: "2px dashed #00c8ff", background: "rgba(0,200,255,0.08)", pointerEvents: "none" }} />
                     )}
                   </div>
                 )
@@ -1128,13 +950,10 @@ export default function CartillaLillyPRO() {
             </div>
             <div className="lilly-card">
               <div className="section-label">Observaciones del evaluador</div>
-              <textarea className="lilly-input textarea-field" placeholder="Ingrese observaciones técnicas del sitio..."
-                value={observaciones} onChange={(e) => setObservaciones(e.target.value)} />
+              <textarea className="lilly-input textarea-field" placeholder="Ingrese observaciones técnicas del sitio..." value={observaciones} onChange={(e) => setObservaciones(e.target.value)} />
               <button className="lilly-btn btn-green" onClick={guardarEvaluacion} disabled={!datosValidos}>⬡ Guardar evaluación</button>
               <button className="lilly-btn btn-orange" onClick={guardarEvalComoAprendizaje} disabled={!analisisIA || !preview || !rmd || !jps || !jpo}>⬡ Guardar como aprendizaje</button>
-              <button className="lilly-btn btn-excel"
-                onClick={() => exportarCartillaExcel(evaluacionesSector, { tronada, banco, sector, coordE, coordN, coordCota, fecha: new Date().toLocaleDateString(), tipoLit: tipoLitologico, rcu, rqd, ff, agua, realizadoPor, observaciones })}
-                disabled={evaluacionesSector.length === 0}>
+              <button className="lilly-btn btn-excel" onClick={() => exportarCartillaExcel(evaluacionesSector, { tronada, banco, sector, coordE, coordN, coordCota, fecha: new Date().toLocaleDateString(), tipoLit: tipoLitologico, rcu, rqd, ff, agua, realizadoPor, observaciones })} disabled={evaluacionesSector.length === 0}>
                 ⬡ Exportar Cartilla Excel ({evaluacionesSector.length} col)
               </button>
               <button className="lilly-btn btn-gray" onClick={limpiarSector} disabled={evaluacionesSector.length === 0}>⬡ Nuevo sector</button>
@@ -1150,8 +969,7 @@ export default function CartillaLillyPRO() {
             <div className="lilly-card">
               <div className="section-label">Zona de carga IA</div>
               <p className="hint" style={{ marginBottom: 10 }}>Carga una imagen, calibra la escala si tienes pelota de referencia, luego analiza con IA.</p>
-              <input id="fileLearn" type="file" style={{ display: "none" }} accept="image/*"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) seleccionarImagen(f, "aprendizaje"); }} />
+              <input id="fileLearn" type="file" style={{ display: "none" }} accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) seleccionarImagen(f, "aprendizaje"); }} />
               <button className="lilly-btn btn-blue" onClick={() => document.getElementById("fileLearn").click()}>⬡ Seleccionar imagen</button>
               {learnPreview && !mostrarCirculoLearn && <button className="lilly-btn btn-orange" onClick={() => setMostrarCirculoLearn(true)}>⬡ Calibrar escala</button>}
               <button className="lilly-btn btn-blue" onClick={analizarImagenLearn} disabled={loadingLearn || !learnPreview}>
@@ -1159,7 +977,7 @@ export default function CartillaLillyPRO() {
               </button>
               {learnImage && <div className="file-tag"><span style={{ color: prefs.accentColor }}>■</span>{learnImage.name}</div>}
               {escalaLearn && (
-                <div className="scale-badge">⬡ Escala: 1px = {escalaLearn.cmPorPixel.toFixed(4)}cm · Pelota {escalaLearn.diametroCm}cm
+                <div className="scale-badge">⬡ Escala: 1px = {escalaLearn.cmPorPixel.toFixed(4)}cm · {escalaLearn.modo === "manual" ? "Manual" : `Pelota ${escalaLearn.diametroCm}cm`}
                   <span style={{ cursor: "pointer", marginLeft: 6, color: "#ff4466" }} onClick={() => setEscalaLearn(null)}>✕</span>
                 </div>
               )}
@@ -1195,8 +1013,7 @@ export default function CartillaLillyPRO() {
               <CompareRow label="JPO" ia={learnIA?.jpo} real={realJpo} setReal={setRealJpo} />
               <div style={{ marginTop: 8 }}>
                 <div className="compare-label">Observación técnica del caso</div>
-                <textarea className="lilly-input textarea-field" placeholder="Describe el contexto o corrección aplicada..."
-                  value={learnObs} onChange={(e) => setLearnObs(e.target.value)} />
+                <textarea className="lilly-input textarea-field" placeholder="Describe el contexto o corrección aplicada..." value={learnObs} onChange={(e) => setLearnObs(e.target.value)} />
               </div>
               <button className="lilly-btn btn-green" onClick={guardarCasoAprendizaje}>⬡ Guardar caso</button>
               <button className="lilly-btn btn-excel" onClick={exportarAprendizajeExcel}>⬡ Exportar base</button>
@@ -1235,17 +1052,8 @@ export default function CartillaLillyPRO() {
         </div>
       )}
 
-      <button onClick={() => setShowConfig(!showConfig)} style={{
-        position: "fixed", bottom: 32, right: 32, width: 54, height: 54, borderRadius: "50%",
-        background: "linear-gradient(135deg, #0050b3, #0080ff)", border: "2px solid #00c8ff",
-        color: "white", fontSize: 24, cursor: "pointer", zIndex: 99999,
-        boxShadow: "0 0 28px rgba(0,200,255,0.7), 0 0 0 4px rgba(0,128,255,0.25)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        transition: "transform 0.2s, box-shadow 0.2s", outline: "none",
-      }}
-        onMouseEnter={e => e.currentTarget.style.transform = "scale(1.12)"}
-        onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-      >⚙</button>
+      <button onClick={() => setShowConfig(!showConfig)} style={{ position: "fixed", bottom: 32, right: 32, width: 54, height: 54, borderRadius: "50%", background: "linear-gradient(135deg, #0050b3, #0080ff)", border: "2px solid #00c8ff", color: "white", fontSize: 24, cursor: "pointer", zIndex: 99999, boxShadow: "0 0 28px rgba(0,200,255,0.7), 0 0 0 4px rgba(0,128,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center", transition: "transform 0.2s, box-shadow 0.2s", outline: "none" }}
+        onMouseEnter={e => e.currentTarget.style.transform = "scale(1.12)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>⚙</button>
 
       {showConfig && <PanelConfig prefs={prefs} onSave={savePrefs} onClose={() => setShowConfig(false)} />}
     </div>
