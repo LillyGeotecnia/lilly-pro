@@ -163,48 +163,51 @@ function recortarImagen(dataUrl, rect) {
 }
 
 // ─── COMPONENTE CÍRCULO DE ESCALA ─────────────────────────────────────────────
+// Modo: dos clics en extremos opuestos de la pelota.
+// Clic 1 → marca punto A (extremo izquierdo/superior)
+// Clic 2 → marca punto B (extremo derecho/inferior) → dibuja círculo entre A y B
+// El usuario ingresa el diámetro real manualmente. Sin estimación automática.
 function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
   const canvasRef = useRef(null);
-  const [drawing, setDrawing] = useState(false);
-  const [circle, setCircle] = useState(null);
-  const [start, setStart] = useState(null);
+  const [puntoA, setPuntoA]   = useState(null); // primer clic
+  const [circle, setCircle]   = useState(null); // círculo final
   const [diametro, setDiametro] = useState("20");
-  const [unidad, setUnidad] = useState("cm");
-  const [escalaManual, setEscalaManual] = useState("");
-  const [modoEscala, setModoEscala] = useState("pelota");
+  const [unidad, setUnidad]   = useState("cm");
   const [imgSize, setImgSize] = useState({ w: 0, h: 0, natW: 0, natH: 0 });
 
   const diametroValido = pv(diametro) > 0;
-  const circuloValido = circle && circle.r >= 5;
-  const escalaManualValida = pv(escalaManual) > 0;
-  const puedeConfirmar = modoEscala === "manual" ? escalaManualValida : diametroValido && circuloValido;
+  const circuloValido  = circle && circle.r >= 5;
+  const puedeConfirmar = diametroValido && circuloValido;
 
+  // ── Cargar imagen y calcular tamaño de canvas ────────────────────────────
   useEffect(() => {
     const img = new Image();
     img.onload = () => {
       const maxW = Math.min(800, window.innerWidth - 80);
       const ratio = img.naturalHeight / img.naturalWidth;
-      setImgSize({ w: maxW, h: maxW * ratio, natW: img.naturalWidth, natH: img.naturalHeight });
+      setImgSize({ w: maxW, h: Math.round(maxW * ratio), natW: img.naturalWidth, natH: img.naturalHeight });
     };
     img.src = imgSrc;
   }, [imgSrc]);
 
+  // ── Bloquear scroll/zoom en canvas ──────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !imgSize.w) return;
     const prevent = (e) => e.preventDefault();
-    canvas.addEventListener("wheel", prevent, { passive: false });
-    canvas.addEventListener("touchmove", prevent, { passive: false });
-    canvas.addEventListener("touchstart", prevent, { passive: false });
+    canvas.addEventListener("wheel",       prevent, { passive: false });
+    canvas.addEventListener("touchmove",   prevent, { passive: false });
+    canvas.addEventListener("touchstart",  prevent, { passive: false });
     canvas.addEventListener("contextmenu", prevent);
     return () => {
-      canvas.removeEventListener("wheel", prevent);
-      canvas.removeEventListener("touchmove", prevent);
-      canvas.removeEventListener("touchstart", prevent);
+      canvas.removeEventListener("wheel",       prevent);
+      canvas.removeEventListener("touchmove",   prevent);
+      canvas.removeEventListener("touchstart",  prevent);
       canvas.removeEventListener("contextmenu", prevent);
     };
   }, [imgSize]);
 
+  // ── Redibujar canvas cuando cambia puntoA o circle ──────────────────────
   useEffect(() => {
     if (!canvasRef.current || !imgSize.w) return;
     const canvas = canvasRef.current;
@@ -213,117 +216,176 @@ function CirculoEscala({ imgSrc, onEscalaCalculada, onCancelar }) {
     img.onload = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      // Punto A marcado pero aún no hay círculo: mostrar cruz verde
+      if (puntoA && !circle) {
+        const s = 10;
+        ctx.strokeStyle = "#ffb800";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(puntoA.x - s, puntoA.y); ctx.lineTo(puntoA.x + s, puntoA.y);
+        ctx.moveTo(puntoA.x, puntoA.y - s); ctx.lineTo(puntoA.x, puntoA.y + s);
+        ctx.stroke();
+        ctx.fillStyle = "#ffb800";
+        ctx.font = "bold 12px monospace";
+        ctx.fillText("A", puntoA.x + 12, puntoA.y - 6);
+      }
+
+      // Círculo completo: dibujar sin mostrar medidas en píxeles
       if (circle) {
         ctx.beginPath();
         ctx.arc(circle.cx, circle.cy, circle.r, 0, 2 * Math.PI);
         ctx.strokeStyle = "#00ff88";
         ctx.lineWidth = 2;
         ctx.stroke();
-        ctx.fillStyle = "rgba(0,255,136,0.15)";
+        ctx.fillStyle = "rgba(0,255,136,0.12)";
         ctx.fill();
-        ctx.fillStyle = "#00ff88";
-        ctx.font = "bold 13px monospace";
-        ctx.fillText(`⌀ ${(circle.r * 2).toFixed(0)}px`, circle.cx - circle.r, circle.cy - circle.r - 6);
+
+        // Marcar punto A y punto B en los extremos
+        [
+          { x: circle.cx - circle.r, y: circle.cy, label: "A" },
+          { x: circle.cx + circle.r, y: circle.cy, label: "B" },
+        ].forEach(({ x, y, label }) => {
+          ctx.beginPath();
+          ctx.arc(x, y, 5, 0, 2 * Math.PI);
+          ctx.fillStyle = "#ffb800";
+          ctx.fill();
+          ctx.fillStyle = "#ffb800";
+          ctx.font = "bold 12px monospace";
+          ctx.fillText(label, x + 8, y - 6);
+        });
       }
     };
     img.src = imgSrc;
-  }, [circle, imgSize, imgSrc]);
+  }, [puntoA, circle, imgSize, imgSrc]);
 
+  // ── Obtener posición del puntero en coordenadas del canvas ───────────────
   const getPos = (e) => {
     const canvas = canvasRef.current;
     const r = canvas.getBoundingClientRect();
     const scaleX = canvas.width / r.width;
     const scaleY = canvas.height / r.height;
-    return { x: (e.clientX - r.left) * scaleX, y: (e.clientY - r.top) * scaleY };
+    return {
+      x: (e.clientX - r.left) * scaleX,
+      y: (e.clientY - r.top)  * scaleY,
+    };
   };
 
-  const onPointerDown = (e) => {
-    e.preventDefault(); e.stopPropagation();
-    if (modoEscala !== "pelota") return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    const p = getPos(e); setStart(p); setDrawing(true); setCircle(null);
-  };
-  const onPointerMove = (e) => {
-    e.preventDefault(); e.stopPropagation();
-    if (modoEscala !== "pelota" || !drawing || !start) return;
+  // ── Manejar clics: primer clic = punto A, segundo clic = punto B ─────────
+  const handleClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     const p = getPos(e);
-    const dx = p.x - start.x, dy = p.y - start.y;
-    const r = Math.sqrt(dx * dx + dy * dy) / 2;
-    const cx = start.x + dx / 2, cy = start.y + dy / 2;
-    setCircle({ cx, cy, r });
-  };
-  const onPointerUp = (e) => {
-    if (e) { e.preventDefault(); e.stopPropagation(); try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {} }
-    setDrawing(false);
+
+    if (!puntoA) {
+      // Primer clic: guardar punto A, limpiar círculo anterior
+      setPuntoA(p);
+      setCircle(null);
+    } else {
+      // Segundo clic: calcular círculo entre A y B
+      const dx = p.x - puntoA.x;
+      const dy = p.y - puntoA.y;
+      const r  = Math.sqrt(dx * dx + dy * dy) / 2;
+      const cx = puntoA.x + dx / 2;
+      const cy = puntoA.y + dy / 2;
+      setCircle({ cx, cy, r });
+      setPuntoA(null); // reset para permitir redibujar
+    }
   };
 
+  // ── Reiniciar dibujo ─────────────────────────────────────────────────────
+  const reiniciar = () => {
+    setPuntoA(null);
+    setCircle(null);
+  };
+
+  // ── Confirmar escala ─────────────────────────────────────────────────────
   const confirmar = () => {
-    if (modoEscala === "manual") {
-      const cmPorPixel = pv(escalaManual);
-      if (!cmPorPixel || cmPorPixel <= 0) { alert("Ingresa una escala manual válida en cm/pixel"); return; }
-      onEscalaCalculada({ cmPorPixel, diametroCm: null, diametroPx: null, modo: "manual" });
-      return;
-    }
-    if (!circle || circle.r < 5) { alert("Dibuja un círculo sobre la pelota primero"); return; }
+    if (!circle || circle.r < 5) { alert("Marca los dos extremos de la pelota primero"); return; }
     const d = pv(diametro);
     if (!d || d <= 0) { alert("Ingresa el diámetro real de la pelota"); return; }
-    const diametroCm = unidad === "mm" ? d / 10 : d;
-    const scaleX = imgSize.natW / imgSize.w;
+    const diametroCm  = unidad === "mm" ? d / 10 : d;
+    const scaleX      = imgSize.natW / imgSize.w;
     const diametroPxNat = circle.r * 2 * scaleX;
-    const cmPorPixel = diametroCm / diametroPxNat;
+    const cmPorPixel  = diametroCm / diametroPxNat;
     onEscalaCalculada({ cmPorPixel, diametroCm, diametroPx: diametroPxNat, modo: "pelota" });
   };
 
   if (!imgSize.w) return <div style={{ color: "#4a8faa", padding: 20 }}>Cargando imagen...</div>;
 
+  // Estado del proceso de marcado
+  const paso = !puntoA && !circle ? 1 : puntoA && !circle ? 2 : 3;
+
   return (
     <div style={{ animation: "fadein 0.3s ease" }}>
-      <p style={{ color: "#ffb86c", fontFamily: "'Share Tech Mono', monospace", fontSize: 12, marginBottom: 12 }}>
-        ⬡ Define la escala: ingresa el diámetro real y dibuja la pelota, o usa una escala manual
-      </p>
-      <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-        <button type="button" className={modoEscala === "pelota" ? "lilly-btn btn-orange" : "lilly-btn btn-gray"} style={{ marginTop: 0 }} onClick={() => setModoEscala("pelota")}>⬡ Pelota referencia</button>
-        <button type="button" className={modoEscala === "manual" ? "lilly-btn btn-orange" : "lilly-btn btn-gray"} style={{ marginTop: 0 }} onClick={() => setModoEscala("manual")}>⬡ Escala manual</button>
+
+      {/* Instrucciones dinámicas según el paso */}
+      <div style={{
+        fontFamily: "'Share Tech Mono', monospace", fontSize: 12, marginBottom: 12,
+        padding: "8px 12px", border: "1px solid #0f4060", background: "#03070f",
+      }}>
+        {paso === 1 && <span style={{ color: "#ffb800" }}>⬡ PASO 1/2 — Haz clic en un extremo de la pelota (punto A)</span>}
+        {paso === 2 && <span style={{ color: "#ffb800" }}>⬡ PASO 2/2 — Haz clic en el extremo opuesto de la pelota (punto B)</span>}
+        {paso === 3 && <span style={{ color: "#00ff88" }}>✓ Pelota marcada — ingresa el diámetro real y confirma</span>}
       </div>
-      <canvas ref={canvasRef} width={imgSize.w} height={imgSize.h}
-        style={{ display: "block", border: "1px solid #0f2a45", cursor: modoEscala === "pelota" ? "crosshair" : "not-allowed", maxWidth: "100%", touchAction: "none", userSelect: "none", WebkitUserSelect: "none" }}
-        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onDragStart={(e) => e.preventDefault()} />
-      {modoEscala === "pelota" ? (
-        <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-          <div>
-            <div className="compare-label">Diámetro real de la pelota</div>
-            <input className="lilly-input" style={{ width: 120, marginTop: 4 }} value={diametro} onChange={(e) => setDiametro(e.target.value)} placeholder="ej: 20" />
-          </div>
-          <div>
-            <div className="compare-label">Unidad</div>
-            <select className="lilly-input" style={{ width: 90, marginTop: 4 }} value={unidad} onChange={(e) => setUnidad(e.target.value)}>
-              <option value="cm">cm</option>
-              <option value="mm">mm</option>
-            </select>
-          </div>
-          <div style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: 11, color: "#4a8faa", paddingBottom: 10, minWidth: 250 }}>
-            <div style={{ color: diametroValido ? "#00ff88" : "#ffb86c" }}>{diametroValido ? "✓" : "○"} Diámetro real ingresado</div>
-            <div style={{ color: circuloValido ? "#00ff88" : "#ffb86c" }}>{circuloValido ? "✓" : "○"} Círculo dibujado sobre la pelota</div>
-          </div>
-          <button className="lilly-btn btn-green" onClick={confirmar} disabled={!puedeConfirmar}>⬡ Confirmar escala</button>
-          <button className="lilly-btn btn-gray" onClick={onCancelar}>⬡ Cancelar</button>
+
+      <canvas
+        ref={canvasRef}
+        width={imgSize.w}
+        height={imgSize.h}
+        style={{
+          display: "block",
+          border: "1px solid #0f2a45",
+          cursor: "crosshair",
+          maxWidth: "100%",
+          touchAction: "none",
+          userSelect: "none",
+          WebkitUserSelect: "none",
+        }}
+        onClick={handleClick}
+        onContextMenu={(e) => e.preventDefault()}
+        onDragStart={(e) => e.preventDefault()}
+      />
+
+      {/* Controles inferiores */}
+      <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+        <div>
+          <div className="compare-label">Diámetro real de la pelota</div>
+          <input
+            className="lilly-input"
+            style={{ width: 120, marginTop: 4 }}
+            value={diametro}
+            onChange={(e) => setDiametro(e.target.value)}
+            placeholder="ej: 20"
+          />
         </div>
-      ) : (
-        <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-          <div>
-            <div className="compare-label">Escala manual cm/pixel</div>
-            <input className="lilly-input" style={{ width: 160, marginTop: 4 }} value={escalaManual} onChange={(e) => setEscalaManual(e.target.value)} placeholder="ej: 0,05" />
-          </div>
-          <div style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: 11, color: "#4a8faa", paddingBottom: 10, maxWidth: 420 }}>
-            Usa esta opción solo si ya conoces la escala real de la imagen. Ejemplo: 0,05 cm/pixel.
-          </div>
-          <button className="lilly-btn btn-green" onClick={confirmar} disabled={!puedeConfirmar}>⬡ Confirmar escala</button>
-          <button className="lilly-btn btn-gray" onClick={onCancelar}>⬡ Cancelar</button>
+        <div>
+          <div className="compare-label">Unidad</div>
+          <select className="lilly-input" style={{ width: 90, marginTop: 4 }} value={unidad} onChange={(e) => setUnidad(e.target.value)}>
+            <option value="cm">cm</option>
+            <option value="mm">mm</option>
+          </select>
         </div>
-      )}
-      {modoEscala === "pelota" && circle && circle.r >= 5 && (
+
+        {/* Indicadores de estado */}
+        <div style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: 11, color: "#4a8faa", paddingBottom: 10, minWidth: 220 }}>
+          <div style={{ color: diametroValido ? "#00ff88" : "#ffb86c" }}>
+            {diametroValido ? "✓" : "○"} Diámetro real ingresado
+          </div>
+          <div style={{ color: circuloValido ? "#00ff88" : "#ffb86c" }}>
+            {circuloValido ? "✓" : "○"} Pelota marcada (A → B)
+          </div>
+        </div>
+
+        <button className="lilly-btn btn-green"  onClick={confirmar}  disabled={!puedeConfirmar}>⬡ Confirmar escala</button>
+        <button className="lilly-btn btn-orange"  onClick={reiniciar}  disabled={!puntoA && !circle}>⬡ Redibujar</button>
+        <button className="lilly-btn btn-gray"    onClick={onCancelar}>⬡ Cancelar</button>
+      </div>
+
+      {/* Resultado preview si ya hay círculo */}
+      {circuloValido && diametroValido && (
         <div style={{ marginTop: 8, fontFamily: "'Share Tech Mono', monospace", fontSize: 11, color: "#00ff88" }}>
-          ✓ Círculo: {(circle.r * 2).toFixed(0)}px de diámetro
+          ✓ Escala calculada: 1px = {((pv(diametro) / (unidad === "mm" ? 10 : 1)) / (circle.r * 2 * (imgSize.natW / imgSize.w))).toFixed(4)} cm/px
         </div>
       )}
     </div>
@@ -649,7 +711,6 @@ export default function CartillaLillyPRO() {
     };
   }, [learningCases]);
 
-  // ─── LIMPIAR CAMPOS EVALUACIÓN ──────────────────────────────────────────────
   const limpiarCamposEvaluacion = useCallback(() => {
     setImagen(null); setPreview(""); setEscalaEval(null);
     setMostrarCirculoEval(false); setRectEval(null); setMostrarRectEval(false);
@@ -659,7 +720,6 @@ export default function CartillaLillyPRO() {
     setTimeout(() => { document.body.click(); document.body.focus(); }, 100);
   }, []);
 
-  // ─── LIMPIAR CAMPOS APRENDIZAJE ─────────────────────────────────────────────
   const limpiarCamposAprendizaje = useCallback(() => {
     setLearnImage(null); setLearnPreview(""); setEscalaLearn(null);
     setMostrarCirculoLearn(false); setRectLearn(null); setMostrarRectLearn(false);
@@ -742,7 +802,6 @@ export default function CartillaLillyPRO() {
     const actualizadoS = [...evaluacionesSector, evalSector];
     setEvaluacionesSector(actualizadoS); writeLS("lilly_sector", actualizadoS);
     alert("✓ Evaluación guardada");
-    // ── LIMPIAR AUTOMÁTICAMENTE TRAS GUARDAR ──
     limpiarCamposEvaluacion();
   }, [datosValidos, crearRegistro, historial, rmd, jps, jpo, SGI, HD, BI, FC, imagen, evaluacionesSector, evaluador, limpiarCamposEvaluacion]);
 
@@ -777,7 +836,6 @@ export default function CartillaLillyPRO() {
     const actualizado = [nuevo, ...learningCases];
     setLearningCases(actualizado); writeLS("lilly_learning", actualizado);
     alert("✓ Caso de aprendizaje guardado");
-    // ── LIMPIAR AUTOMÁTICAMENTE TRAS GUARDAR ──
     limpiarCamposAprendizaje();
   }, [learnIA, realRmd, realJps, realJpo, learnImage, learnPreview, learnObs, learningCases, evaluador, limpiarCamposAprendizaje]);
 
@@ -873,7 +931,7 @@ export default function CartillaLillyPRO() {
               </div>
               {imagen && <div className="file-tag"><span style={{ color: prefs.accentColor }}>■</span>{imagen.name}</div>}
               {escalaEval && (
-                <div className="scale-badge">⬡ Escala: 1px = {escalaEval.cmPorPixel.toFixed(4)}cm · {escalaEval.modo === "manual" ? "Manual" : `Pelota ${escalaEval.diametroCm}cm`}
+                <div className="scale-badge">⬡ Escala: 1px = {escalaEval.cmPorPixel.toFixed(4)}cm · Pelota {escalaEval.diametroCm}cm
                   <span style={{ cursor: "pointer", marginLeft: 6, color: "#ff4466" }} onClick={() => setEscalaEval(null)}>✕</span>
                 </div>
               )}
@@ -977,7 +1035,7 @@ export default function CartillaLillyPRO() {
               </button>
               {learnImage && <div className="file-tag"><span style={{ color: prefs.accentColor }}>■</span>{learnImage.name}</div>}
               {escalaLearn && (
-                <div className="scale-badge">⬡ Escala: 1px = {escalaLearn.cmPorPixel.toFixed(4)}cm · {escalaLearn.modo === "manual" ? "Manual" : `Pelota ${escalaLearn.diametroCm}cm`}
+                <div className="scale-badge">⬡ Escala: 1px = {escalaLearn.cmPorPixel.toFixed(4)}cm · Pelota {escalaLearn.diametroCm}cm
                   <span style={{ cursor: "pointer", marginLeft: 6, color: "#ff4466" }} onClick={() => setEscalaLearn(null)}>✕</span>
                 </div>
               )}
