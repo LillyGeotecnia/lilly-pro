@@ -4,10 +4,6 @@ import * as XLSX from "xlsx";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// ─── CONSTANTES ───────────────────────────────────────────────────────────────
-const MODEL = "claude-sonnet-4-6";
-const API_URL = "https://api.anthropic.com/v1/messages";
-
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -18,7 +14,17 @@ const supabase = createClient(
 const pv = (v) => { const n = Number(String(v).replace(",", ".")); return isNaN(n) ? 0 : n; };
 const fmt = (n) => n.toFixed(2).replace(".", ",");
 const readLS = (key, fallback) => { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : fallback; } catch { return fallback; } };
-const writeLS = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { } };
+const writeLS = (key, value) => {
+  try { localStorage.setItem(key, JSON.stringify(value)); }
+  catch (e) {
+    console.error("localStorage lleno o inaccesible:", key, e);
+    alert("⚠ No se pudo guardar localmente (almacenamiento lleno). Los datos SÍ quedaron en Supabase.");
+  }
+};
+// Quita las imágenes base64 antes de persistir en localStorage (cuota ~5 MB)
+const sinImagen = (arr) => arr.map(({ ImagenBase64, ...rest }) => rest);
+// Limita un valor entero al rango válido de la Cartilla Lilly
+const clamp = (v, min, max) => Math.min(max, Math.max(min, Math.round(Number(v) || min)));
 
 // ─── DEFAULTS ─────────────────────────────────────────────────────────────────
 const DEFAULT_PREFS = { fontSize: 14, bgColor: "#03070f", accentColor: "#00c8ff" };
@@ -134,12 +140,37 @@ body { background: ${prefs.bgColor}; color: #c8dff0; font-family: 'Rajdhani', sa
 `;
 }
 
+// ─── COMPRESIÓN DE IMAGEN ─────────────────────────────────────────────────────
+// Reduce la imagen a un lado máximo de 1600 px y JPEG 0.85 antes de enviarla.
+// Evita el límite de ~4.5 MB de body en las funciones serverless de Vercel.
+function comprimirImagen(dataUrl, maxLado = 1600, calidad = 0.85) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const factor = Math.min(1, maxLado / Math.max(img.width, img.height));
+      if (factor === 1 && dataUrl.length < 3_000_000) { resolve(dataUrl); return; }
+      const canvas = document.createElement("canvas");
+      canvas.width  = Math.round(img.width * factor);
+      canvas.height = Math.round(img.height * factor);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", calidad));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 // ─── LLAMADA A CLAUDE API ─────────────────────────────────────────────────────
-async function llamarClaudeVision(imageDataUrl, escalaInfo) {
+// casosAprendizaje: últimos casos validados (sin imágenes) para calibrar la estimación.
+async function llamarClaudeVision(imageDataUrl, escalaInfo, casosAprendizaje) {
+  const imagenComprimida = await comprimirImagen(imageDataUrl);
+  const aprendizaje = (casosAprendizaje || []).slice(0, 10).map((c) => ({
+    ia: c.ia, real: c.real, observacion: (c.observacion || "").slice(0, 200),
+  }));
   const response = await fetch("/api/analizar-imagen", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image: imageDataUrl, escala: escalaInfo || null }),
+    body: JSON.stringify({ image: imagenComprimida, escala: escalaInfo || null, aprendizaje }),
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
@@ -594,16 +625,14 @@ function PantallaLogin({ onLogin }) {
     if (!nombre.trim() || !pin.trim()) { setError("Ingresa tu nombre y PIN"); return; }
     setLoading(true); setError("");
     try {
-      const { data, error: err } = await supabase.from("evaluadores").select("*").eq("nombre", nombre.trim()).single();
-      if (err && err.code === "PGRST116") {
-        const { data: nuevo, error: errCreate } = await supabase.from("evaluadores").insert({ nombre: nombre.trim(), pin: pin.trim() }).select().single();
-        if (errCreate) throw errCreate;
-        onLogin(nuevo);
-      } else if (err) { throw err; }
-      else {
-        if (data.pin !== pin.trim()) { setError("PIN incorrecto"); setLoading(false); return; }
-        onLogin(data);
-      }
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: nombre.trim(), pin: pin.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || `Error HTTP ${res.status}`); setLoading(false); return; }
+      onLogin(data.evaluador);
     } catch (e) { setError("Error: " + e.message); }
     finally { setLoading(false); }
   };
@@ -743,13 +772,13 @@ export default function CartillaLillyPRO() {
     setLoadingEval(true);
     try {
       const imgParaAnalizar = rectEval ? await recortarImagen(capturedPreview, rectEval) : capturedPreview;
-      const data = await llamarClaudeVision(imgParaAnalizar, escalaEval);
+      const data = await llamarClaudeVision(imgParaAnalizar, escalaEval, learningCases);
       if (capturedPreview !== preview) return;
-      setRmd(String(data.rmd ?? "")); setJps(String(data.jps ?? "")); setJpo(String(data.jpo ?? ""));
+      setRmd(String(clamp(data.rmd, 10, 50))); setJps(String(clamp(data.jps, 10, 50))); setJpo(String(clamp(data.jpo, 10, 40)));
       setAnalisisIA(data);
     } catch (err) { alert("Error Claude API: " + (err.message || String(err))); }
     finally { setLoadingEval(false); }
-  }, [preview, escalaEval, rectEval]);
+  }, [preview, escalaEval, rectEval, learningCases]);
 
   const analizarImagenLearn = useCallback(async () => {
     if (!learnPreview) { alert("Selecciona una imagen primero"); return; }
@@ -757,18 +786,18 @@ export default function CartillaLillyPRO() {
     setLoadingLearn(true);
     try {
       const imgParaAnalizar = rectLearn ? await recortarImagen(capturedPreview, rectLearn) : capturedPreview;
-      const data = await llamarClaudeVision(imgParaAnalizar, escalaLearn);
+      const data = await llamarClaudeVision(imgParaAnalizar, escalaLearn, learningCases);
       if (capturedPreview !== learnPreview) return;
       setLearnIA(data);
     } catch (err) { alert("Error Claude API: " + (err.message || String(err))); }
     finally { setLoadingLearn(false); }
-  }, [learnPreview, escalaLearn, rectLearn]);
+  }, [learnPreview, escalaLearn, rectLearn, learningCases]);
 
   const aplicarCorreccionPromedio = () => {
     if (learningCases.length === 0) { alert("No hay casos de aprendizaje todavía"); return; }
-    setRmd(String(Math.round(pv(rmd) + promedioError.rmd)));
-    setJps(String(Math.round(pv(jps) + promedioError.jps)));
-    setJpo(String(Math.round(pv(jpo) + promedioError.jpo)));
+    setRmd(String(clamp(pv(rmd) + promedioError.rmd, 10, 50)));
+    setJps(String(clamp(pv(jps) + promedioError.jps, 10, 50)));
+    setJpo(String(clamp(pv(jpo) + promedioError.jpo, 10, 40)));
   };
 
   const crearRegistro = useCallback(() => ({
@@ -797,7 +826,7 @@ export default function CartillaLillyPRO() {
     });
     if (error) { alert("Error al guardar en Supabase: " + error.message); return; }
     const actualizadoH = [r, ...historial];
-    setHistorial(actualizadoH); writeLS("historial_lilly", actualizadoH);
+    setHistorial(actualizadoH); writeLS("historial_lilly", sinImagen(actualizadoH));
     const evalSector = { rmd: pv(rmd), jps: pv(jps), jpo: pv(jpo), sgi: SGI, hd: HD, bi: BI, fc: FC, imagen: imagen?.name || "" };
     const actualizadoS = [...evaluacionesSector, evalSector];
     setEvaluacionesSector(actualizadoS); writeLS("lilly_sector", actualizadoS);
@@ -816,7 +845,7 @@ export default function CartillaLillyPRO() {
     const real = { rmd: pv(rmd), jps: pv(jps), jpo: pv(jpo) };
     const nuevo = { Fecha: new Date().toLocaleString(), ArchivoImagen: imagen?.name || "", ImagenBase64: preview, ia, real, error: { rmd: real.rmd - ia.rmd, jps: real.jps - ia.jps, jpo: real.jpo - ia.jpo }, confianza: analisisIA.confianza || "Validado desde evaluación", observacion: observaciones || "Guardado desde Evaluación.", analisis: analisisIA };
     const actualizado = [nuevo, ...learningCases];
-    setLearningCases(actualizado); writeLS("lilly_learning", actualizado);
+    setLearningCases(actualizado); writeLS("lilly_learning", sinImagen(actualizado));
     alert("✓ Guardado también como caso de aprendizaje");
   }, [analisisIA, preview, rmd, jps, jpo, imagen, observaciones, learningCases]);
 
@@ -834,7 +863,7 @@ export default function CartillaLillyPRO() {
     });
     if (error) { alert("Error al guardar en Supabase: " + error.message); return; }
     const actualizado = [nuevo, ...learningCases];
-    setLearningCases(actualizado); writeLS("lilly_learning", actualizado);
+    setLearningCases(actualizado); writeLS("lilly_learning", sinImagen(actualizado));
     alert("✓ Caso de aprendizaje guardado");
     limpiarCamposAprendizaje();
   }, [learnIA, realRmd, realJps, realJpo, learnImage, learnPreview, learnObs, learningCases, evaluador, limpiarCamposAprendizaje]);
