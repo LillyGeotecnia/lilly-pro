@@ -715,11 +715,65 @@ export default function CartillaLillyPRO() {
     document.body.style.background = prefs.bgColor;
   }, [prefs]);
 
+  // Carga local inmediata (respuesta rápida / respaldo sin conexión)
   useEffect(() => {
     setHistorial(readLS("historial_lilly", []));
     setLearningCases(readLS("lilly_learning", []));
     setEvaluacionesSector(readLS("lilly_sector", []));
   }, []);
+
+  // FUENTE DE VERDAD: Supabase. Al iniciar sesión se cargan los casos de
+  // aprendizaje y el historial completos (sin imágenes, para no saturar la
+  // memoria ni localStorage) y se sincroniza la copia local. Así todos los
+  // equipos y usuarios ven la misma base.
+  useEffect(() => {
+    if (!evaluador) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const { data: casos, error: e1 } = await supabase
+          .from("aprendizaje")
+          .select("created_at, archivo_imagen, ia_rmd, ia_jps, ia_jpo, real_rmd, real_jps, real_jpo, error_rmd, error_jps, error_jpo, confianza, observacion, analisis")
+          .order("created_at", { ascending: false })
+          .limit(500);
+        if (e1) { console.error("Sync aprendizaje:", e1); }
+        else if (!cancelado && Array.isArray(casos)) {
+          const mapeados = casos.map((r) => ({
+            Fecha: r.created_at ? new Date(r.created_at).toLocaleString() : "",
+            ArchivoImagen: r.archivo_imagen || "",
+            ia: { rmd: Number(r.ia_rmd) || 0, jps: Number(r.ia_jps) || 0, jpo: Number(r.ia_jpo) || 0 },
+            real: { rmd: Number(r.real_rmd) || 0, jps: Number(r.real_jps) || 0, jpo: Number(r.real_jpo) || 0 },
+            error: { rmd: Number(r.error_rmd) || 0, jps: Number(r.error_jps) || 0, jpo: Number(r.error_jpo) || 0 },
+            confianza: r.confianza || "", observacion: r.observacion || "", analisis: r.analisis || null,
+          }));
+          setLearningCases(mapeados);
+          writeLS("lilly_learning", mapeados);
+        }
+
+        const { data: hist, error: e2 } = await supabase
+          .from("historial")
+          .select("created_at, evaluador, tronada, banco, sector, coord_e, coord_n, coord_cota, tipo_litologico, archivo_imagen, sg, rcu, rqd, ff, agua, rmd, jps, jpo, sgi, hd, bi, fc, confianza_ia, analisis_ia, observaciones")
+          .order("created_at", { ascending: false })
+          .limit(500);
+        if (e2) { console.error("Sync historial:", e2); }
+        else if (!cancelado && Array.isArray(hist)) {
+          const mapeadosH = hist.map((r) => ({
+            Fecha: r.created_at ? new Date(r.created_at).toLocaleString() : "",
+            Tronada: r.tronada || "", Banco: r.banco || "", Sector: r.sector || "",
+            Coord_E: r.coord_e || "", Coord_N: r.coord_n || "", Coord_Cota: r.coord_cota || "",
+            Tipo_Litologico: r.tipo_litologico || "", ArchivoImagen: r.archivo_imagen || "", ImagenBase64: "",
+            SG: r.sg || "", RCU: r.rcu || "", RQD: r.rqd || "", FF: r.ff || "", Agua: r.agua || "",
+            RMD: r.rmd || "", JPS: r.jps || "", JPO: r.jpo || "", SGI: r.sgi || "", HD: r.hd || "", BI: r.bi || "", FC: r.fc || "",
+            ConfianzaIA: r.confianza_ia || "", AnalisisIA: r.analisis_ia || "", Observaciones: r.observaciones || "",
+            RealizadoPor: r.evaluador || "",
+          }));
+          setHistorial(mapeadosH);
+          writeLS("historial_lilly", mapeadosH);
+        }
+      } catch (err) { console.error("Sync Supabase:", err); }
+    })();
+    return () => { cancelado = true; };
+  }, [evaluador]);
 
   const savePrefs = (p) => { setPrefs(p); writeLS("lilly_prefs", p); };
 
@@ -839,15 +893,23 @@ export default function CartillaLillyPRO() {
     setEvaluacionesSector([]); writeLS("lilly_sector", []);
   };
 
-  const guardarEvalComoAprendizaje = useCallback(() => {
+  const guardarEvalComoAprendizaje = useCallback(async () => {
     if (!analisisIA || !preview || !rmd || !jps || !jpo) { alert("Analiza la imagen con IA primero y verifica RMD, JPS, JPO"); return; }
     const ia = { rmd: Number(analisisIA.rmd ?? 0), jps: Number(analisisIA.jps ?? 0), jpo: Number(analisisIA.jpo ?? 0) };
     const real = { rmd: pv(rmd), jps: pv(jps), jpo: pv(jpo) };
     const nuevo = { Fecha: new Date().toLocaleString(), ArchivoImagen: imagen?.name || "", ImagenBase64: preview, ia, real, error: { rmd: real.rmd - ia.rmd, jps: real.jps - ia.jps, jpo: real.jpo - ia.jpo }, confianza: analisisIA.confianza || "Validado desde evaluación", observacion: observaciones || "Guardado desde Evaluación.", analisis: analisisIA };
+    const { error } = await supabase.from("aprendizaje").insert({
+      evaluador: evaluador?.nombre || "", archivo_imagen: imagen?.name || "", imagen_base64: preview,
+      ia_rmd: ia.rmd, ia_jps: ia.jps, ia_jpo: ia.jpo,
+      real_rmd: real.rmd, real_jps: real.jps, real_jpo: real.jpo,
+      error_rmd: real.rmd - ia.rmd, error_jps: real.jps - ia.jps, error_jpo: real.jpo - ia.jpo,
+      confianza: nuevo.confianza, observacion: nuevo.observacion, analisis: analisisIA,
+    });
+    if (error) { alert("Error al guardar en Supabase: " + error.message); return; }
     const actualizado = [nuevo, ...learningCases];
     setLearningCases(actualizado); writeLS("lilly_learning", sinImagen(actualizado));
     alert("✓ Guardado también como caso de aprendizaje");
-  }, [analisisIA, preview, rmd, jps, jpo, imagen, observaciones, learningCases]);
+  }, [analisisIA, preview, rmd, jps, jpo, imagen, observaciones, learningCases, evaluador]);
 
   const guardarCasoAprendizaje = useCallback(async () => {
     if (!learnIA || !realRmd || !realJps || !realJpo) { alert("Analiza la imagen y completa los valores reales"); return; }
